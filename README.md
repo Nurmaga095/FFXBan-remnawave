@@ -68,12 +68,6 @@ Then install node agents:
 - Blocks users via 3x-ui API (`THREEXUI_SERVERS`)
 - No blocker-worker required on 3x-ui nodes
 
-## Security Notes
-
-- Do not commit real `.env` files
-- Do not commit `.claude/` local tooling config
-- Rotate tokens/passwords before publishing if they were used in local testing
-
 ## Repository Notes
 
 This repo contains a migrated/new structure under `ffxban*` directories. If you are updating an older fork, review the diff carefully before merging.
