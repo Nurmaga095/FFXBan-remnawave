@@ -12,6 +12,12 @@ FFXBan is a self-hosted anti-sharing / abuse-detection system for VPN infrastruc
 
 - Current version: `1.0`
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/ffxban-panel-v1.0.png" alt="FFXBan Panel" width="900">
+</p>
+
 ## What Is Included
 
 - `ffxban/` — main Observer service (API + panel + detection logic)
