@@ -1,1 +1,20 @@
-.env
+.claude/
+*.local.json
+
+# Local secrets / runtime configs
+ffxban_conf/.env
+ffxban_conf/.env.fixed
+
+# Local build artifacts
+ffxban-linux-amd64
+ffxban_conf/ffxban-custom
+ffxban_agent/blocker-worker
+*.exe
+
+# Certs/keys
+*.pem
+*.key
+
+# OS/editor
+.DS_Store
+Thumbs.db

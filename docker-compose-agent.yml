@@ -1,0 +1,11 @@
+services:
+  vector-agent:
+    image: timberio/vector:0.48.0-alpine
+    container_name: ffxban-agent
+    volumes:
+      - ./vector.toml:/etc/vector/vector.toml:ro
+      # Xray access log (VPN-подключения)
+      - /usr/local/x-ui/access.log:/var/log/xray/access.log:ro
+      # Nginx sub log (User-Agent подписок) — создаётся автоматически если файл не существует
+      - /var/log/nginx/sub.log:/var/log/nginx/sub.log:ro
+    restart: unless-stopped

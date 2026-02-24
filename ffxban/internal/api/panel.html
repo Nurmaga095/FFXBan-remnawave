@@ -1,0 +1,1873 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FFXBan Panel</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Sora:wght@600;700;800&display=swap");
+    :root{--bg:#050810;--bg2:#09111f;--panel:#0c1422;--line:#1e2d48;--line2:#162038;--text:#eaf0ff;--muted:#7a95be;--blue:#6280ff;--cyan:#1ad5f0;--green:#20c875;--amber:#fbbc24;--red:#f43f6e;--chip:#121d36;--shadow:0 32px 64px rgba(2,5,16,.55)}
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;color:var(--text);font-family:Manrope,sans-serif;background:radial-gradient(ellipse 950px 430px at 4% -12%,rgba(98,128,255,.24),transparent 58%),radial-gradient(ellipse 800px 380px at 105% -8%,rgba(26,213,240,.2),transparent 55%),radial-gradient(ellipse 700px 700px at 75% 105%,rgba(140,80,255,.13),transparent 62%),linear-gradient(180deg,#050810 0%,#070d19 55%,#060c17 100%)}
+    .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(6,10,18,.84);backdrop-filter:blur(16px)}
+    .brand{display:flex;align-items:center;gap:10px;font-family:Sora,sans-serif;font-weight:800;font-size:18px;white-space:nowrap}
+    .brand-badge{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-size:16px;background:linear-gradient(145deg,#7b6fff,#1dd8f4);box-shadow:0 8px 24px rgba(120,110,255,.45);flex-shrink:0}
+    .page-current{font-size:13px;color:var(--muted);background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:7px 12px;white-space:nowrap}
+    .btn{height:40px;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:0 14px;color:#e9f1ff;font-weight:700;background:linear-gradient(180deg,#182440,#111d38);cursor:pointer;transition:.16s;white-space:nowrap}
+    .btn:hover{transform:translateY(-1px);border-color:rgba(98,128,255,.4);box-shadow:0 6px 20px rgba(0,0,0,.3)}
+    .btn.primary{border:0;background:linear-gradient(135deg,#6280ff,#1ad5f0);box-shadow:0 6px 20px rgba(98,128,255,.3)}
+    .btn.warn{border-color:#5a2a35;background:linear-gradient(180deg,#2a1920,#24141b);color:#ffbfd0}
+    .btn.danger{border-color:#7a3050;background:linear-gradient(180deg,#2d1522,#211020);color:#ff9fb4}
+    .top-actions{display:flex;gap:8px;align-items:center}
+    .search-wrap{display:flex;align-items:center;gap:6px;background:#0d1828;border:1px solid var(--line);border-radius:12px;padding:0 10px;height:40px;min-width:200px;transition:.2s;margin-left:auto}
+    .search-wrap:focus-within{border-color:#4f71ff}
+    .search-wrap input{background:none;border:none;outline:none;color:#e4edff;font-weight:600;font-family:Manrope,sans-serif;font-size:14px;width:100%;min-width:0}
+    .search-wrap input::placeholder{color:#4d6490}
+    .search-wrap span{color:#4d6490;font-size:16px;cursor:default}
+    .app{display:grid;grid-template-columns:270px 1fr;min-height:calc(100vh - 69px);transition:grid-template-columns .22s}
+    .app.sidebar-collapsed{grid-template-columns:62px 1fr}
+    .sidebar{margin:16px 0 16px 16px;padding:14px 12px;border-radius:20px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#0d1628,#0a1220 70%);box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.04);display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 102px);position:sticky;top:86px;overflow:hidden;transition:all .22s;min-width:62px}
+    .sidebar.collapsed{padding:10px 6px}
+    .side-head{padding:6px 8px 10px;border-bottom:1px solid var(--line2);display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:56px}
+    .side-title{margin:0;font-family:Sora,sans-serif;font-size:17px;white-space:nowrap;overflow:hidden}
+    .side-sub{margin:5px 0 0;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden}
+    .side-head-text{overflow:hidden}
+    .sidebar.collapsed .side-head-text{display:none}
+    .sidebar-toggle{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:#1a2740;color:#b8c9ed;cursor:pointer;display:grid;place-items:center;font-size:14px;flex-shrink:0;transition:.16s}
+    .sidebar-toggle:hover{border-color:#36518a;background:#1f3050}
+    .nav{overflow:auto;padding-right:4px;display:flex;flex-direction:column;gap:6px}
+    .nav::-webkit-scrollbar{width:4px}.nav::-webkit-scrollbar-track{background:transparent}.nav::-webkit-scrollbar-thumb{background:#243552;border-radius:4px}
+    .menu{width:100%;text-align:left;border:1px solid transparent;border-radius:12px;padding:10px 12px;background:transparent;color:#d8e4ff;display:flex;align-items:center;gap:10px;cursor:pointer;transition:.16s;font-weight:700}
+    .sidebar.collapsed .menu{justify-content:center;padding:10px 0}
+    .menu i{font-style:normal;width:26px;height:26px;display:grid;place-items:center;border-radius:8px;color:#b8c9ed;background:#1a2740;border:1px solid #2a3b60;font-size:13px;flex-shrink:0}
+    .menu span.menu-text{white-space:nowrap;overflow:hidden}
+    .sidebar.collapsed .menu .menu-text{display:none}
+    .menu:hover{background:rgba(255,255,255,.04);border-color:rgba(98,128,255,.2)}
+    .menu.active{color:#fff;background:linear-gradient(100deg,rgba(98,128,255,.38),rgba(26,213,240,.18));border-color:rgba(98,128,255,.5);box-shadow:0 8px 24px rgba(20,40,110,.4),inset 0 1px 0 rgba(255,255,255,.06)}
+    .menu.active i{background:rgba(98,128,255,.3);border-color:rgba(98,128,255,.6);color:#fff}
+    .side-foot{margin-top:auto;border-top:1px solid var(--line2);padding:10px 8px 4px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;white-space:nowrap;overflow:hidden}
+    .sidebar.collapsed .side-foot{display:none}
+    .pulse::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#2fd683;margin-right:7px}
+    .content{padding:18px;overflow:auto}
+    .page{display:none}.page.active{display:block}
+    .section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:4px 2px 12px}
+    .section-head h2{margin:0;font-family:Sora,sans-serif;font-size:26px}
+    .section-head p{margin:4px 0 0;color:var(--muted);font-size:13px}
+    .section-head-actions{display:flex;gap:8px;align-items:center}
+    .stats-grid{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:12px;margin-bottom:12px}
+    .stat-card{border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:12px 14px;background:linear-gradient(155deg,#101c32,#0c1628 60%);box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.05);min-height:100px}
+    .stat-label{color:#b7caef;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+    .stat-value{margin-top:10px;font-size:34px;font-weight:800;line-height:1}
+    .stat-hint{margin-top:8px;color:#97aeda;font-size:12px;font-weight:600}
+    .stat-card.blue{border-color:rgba(98,128,255,.35);box-shadow:var(--shadow),0 0 30px rgba(98,128,255,.08)}.stat-card.cyan{border-color:rgba(26,213,240,.3);box-shadow:var(--shadow),0 0 30px rgba(26,213,240,.07)}.stat-card.green{border-color:rgba(32,200,117,.3);box-shadow:var(--shadow),0 0 30px rgba(32,200,117,.07)}.stat-card.amber{border-color:rgba(251,188,36,.25);box-shadow:var(--shadow),0 0 30px rgba(251,188,36,.06)}.stat-card.red{border-color:rgba(244,63,110,.3);box-shadow:var(--shadow),0 0 30px rgba(244,63,110,.07)}
+    @keyframes numPop{0%{transform:scale(1.2);color:#6daaff}100%{transform:scale(1)}}
+    .stat-anim{animation:numPop .35s ease-out}
+    .grid-2{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;margin-bottom:12px}
+    .charts-row{display:grid;grid-template-columns:repeat(3,minmax(200px,1fr));gap:12px;margin-bottom:12px}
+    .chart-wrap{position:relative;height:185px}
+    .panel{border:1px solid rgba(255,255,255,.07);border-radius:18px;background:linear-gradient(160deg,#0f1b30,#0b1524);box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.04);padding:14px}
+    .panel h3{margin:0 0 12px;font-size:18px;font-family:Sora,sans-serif}
+    .sys-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:0}
+    .sys-card{position:relative;background:linear-gradient(155deg,#101c32,#0b1626);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:13px 14px;overflow:hidden;box-shadow:0 8px 24px rgba(2,5,16,.3)}
+    .sys-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--sys-accent,var(--blue));border-radius:14px 14px 0 0}
+    .sys-card h4{margin:0 0 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sys-accent,var(--blue))}
+    .sys-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;font-size:12px}
+    .sys-row span{color:var(--muted)}
+    .sys-row b{color:#dae8ff;font-weight:600}
+    .sys-bar{height:7px;border-radius:4px;background:rgba(255,255,255,.07);overflow:hidden;margin:6px 0 3px}
+    .sys-bar-fill{height:100%;border-radius:4px;transition:width .5s ease}
+    .sys-bar-fill.ok{background:linear-gradient(90deg,#1aab68,var(--green))}
+    .sys-bar-fill.warn{background:linear-gradient(90deg,#e8980a,var(--amber))}
+    .sys-bar-fill.crit{background:linear-gradient(90deg,#e8224a,var(--red))}
+    .sys-bar-label{display:flex;font-size:11px;color:var(--muted);margin-bottom:6px}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+    .pager{display:flex;align-items:center;gap:6px;margin-top:12px;flex-wrap:wrap}
+    .pager .pager-info{color:var(--muted);font-size:13px;margin-right:auto}
+    .pager .pager-btn{padding:6px 12px;background:#0f1a2f;border:1px solid var(--line);color:#c4d6f0;border-radius:8px;cursor:pointer;font-size:13px;font-family:Manrope,sans-serif}
+    .pager .pager-btn:hover{background:#16274a;border-color:var(--blue)}
+    .pager .pager-btn.active{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700}
+    .pager .pager-btn:disabled{opacity:.35;cursor:default}
+    .input,.select{height:42px;background:#0f1a2f;border:1px solid var(--line);color:#e4edff;border-radius:12px;padding:0 12px;min-width:220px;outline:0;font-weight:600;font-family:Manrope,sans-serif}
+    .input::placeholder{color:#6f84ad}
+    .select{cursor:pointer}
+    .table-wrap{border:1px solid rgba(255,255,255,.07);border-radius:16px;overflow:auto;background:linear-gradient(180deg,#0e1a2e,#0b1424)}
+    table{width:100%;border-collapse:collapse;min-width:760px}
+    th{padding:13px 12px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#8fb0d8;background:#0d1a30;border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap}
+    th.th-check{width:36px;padding:13px 8px}
+    td{padding:11px 12px;border-bottom:1px solid #1f2d48;font-size:14px;color:#e3ecff;vertical-align:middle}
+    td.td-check{padding:11px 8px}
+    tr:last-child td{border-bottom:0} tr:hover td{background:#15233c}
+    .row-click{cursor:pointer}
+    .badge{display:inline-flex;align-items:center;justify-content:center;min-width:26px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid transparent;line-height:1.2}
+    .b-green{background:rgba(36,196,122,.2);color:#6effb6;border-color:rgba(61,211,135,.35)}
+    .b-red{background:rgba(255,84,119,.2);color:#ff9fb4;border-color:rgba(245,92,124,.35)}
+    .b-blue{background:rgba(79,113,255,.2);color:#bfd0ff;border-color:rgba(98,130,255,.38)}
+    .b-amber{background:rgba(255,190,59,.18);color:#ffd27d;border-color:rgba(255,190,59,.32)}
+    .b-cyan{background:rgba(18,201,232,.18);color:#9cecff;border-color:rgba(18,201,232,.35)}
+    .muted{color:var(--muted)}
+    .pill{display:inline-block;padding:3px 9px;border:1px solid #2a3f67;border-radius:9px;background:#13203a;font-size:12px;font-weight:700;color:#c9daff}
+    /* trigger progress bar */
+    .trig-wrap{display:flex;align-items:center;gap:8px;min-width:110px}
+    .trig-text{font-size:13px;font-weight:700;white-space:nowrap;min-width:36px}
+    .trig-bar{flex:1;height:6px;background:#1a2a44;border-radius:3px;overflow:hidden;min-width:50px}
+    .trig-fill{height:100%;border-radius:3px;background:var(--amber);transition:width .4s}
+    .trig-fill.full{background:var(--red)}
+    /* bulk action bar */
+    .bulk-bar{display:none;align-items:center;gap:10px;padding:8px 14px;background:linear-gradient(90deg,rgba(79,113,255,.12),rgba(18,201,232,.08));border:1px solid var(--line);border-radius:12px;margin-bottom:10px}
+    .bulk-bar.show{display:flex}
+    .bulk-count{font-weight:700;color:#b0c4ff;font-size:14px}
+    /* log filter */
+    .log-filter{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;padding:8px 14px;background:#0d1828;border:1px solid var(--line);border-radius:12px;align-items:center}
+    .log-filter .lf-label{font-size:12px;color:var(--muted);font-weight:700;margin-right:4px}
+    .log-filter label{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;color:#cddcff}
+    .log-filter input[type=checkbox]{accent-color:var(--blue);width:14px;height:14px;cursor:pointer}
+    /* timeline */
+    .timeline{position:relative;padding-left:22px;margin-top:4px}
+    .timeline::before{content:"";position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--line);border-radius:2px}
+    .tl-item{position:relative;margin-bottom:14px}
+    .tl-item:last-child{margin-bottom:0}
+    .tl-dot{position:absolute;left:-18px;top:5px;width:12px;height:12px;border-radius:50%;background:var(--blue);border:2px solid #0d1828;flex-shrink:0}
+    .tl-dot.block{background:var(--red)}
+    .tl-dot.unblock{background:var(--green)}
+    .tl-dot.violation{background:var(--amber)}
+    .tl-dot.perm{background:#a855f7}
+    .tl-dot.geo{background:var(--cyan)}
+    .tl-time{font-size:11px;color:var(--muted);font-weight:600}
+    .tl-type{font-size:11px;font-weight:700;margin:2px 0;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+    .tl-msg{font-size:13px;color:#d0dcff;word-break:break-word}
+    .tl-trigs{display:inline-flex;gap:3px;align-items:center;vertical-align:middle;margin:0 3px}
+    .tl-trig{width:7px;height:7px;border-radius:50%;display:inline-block}
+    .tl-trig.hit{background:var(--blue);box-shadow:0 0 4px var(--blue)}
+    .tl-trig.miss{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15)}
+    .tl-ip{color:var(--muted);font-size:11px;margin-left:6px;font-weight:600}
+    /* countdown */
+    .countdown{font-weight:700;color:var(--amber);font-size:13px}
+    .countdown.expired{color:var(--muted)}
+    /* config table */
+    .cfg-table{width:100%;border-collapse:collapse}
+    .cfg-table td{padding:8px 12px;border-bottom:1px solid #1f2d48;font-size:13px;vertical-align:top}
+    .cfg-table td:first-child{color:var(--muted);font-size:12px;font-weight:700;width:45%;white-space:nowrap}
+    .cfg-table td:last-child{font-weight:600;color:#e3ecff;word-break:break-all}
+    .cfg-table tr:last-child td{border-bottom:0}
+    /* modal */
+    .modal,.auth{position:fixed;inset:0;background:rgba(7,11,20,.7);backdrop-filter:blur(4px);display:none;z-index:60}
+    .modal.active,.auth.active{display:flex}
+    .modal{justify-content:center;align-items:center;padding:18px}.auth{align-items:center;justify-content:center;padding:18px}
+    .box{width:min(1180px,96vw);max-height:92vh;background:linear-gradient(180deg,#0f1c32,#0b1528);border:1px solid rgba(255,255,255,.08);border-radius:22px;overflow:auto;padding:20px 22px;box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.05)}
+    .login{width:min(440px,100%);border:1px solid rgba(98,128,255,.2);border-radius:20px;background:linear-gradient(175deg,#101e38,#0c1730);padding:22px;box-shadow:var(--shadow),0 0 60px rgba(98,128,255,.08)}
+    .close{float:right;border:1px solid var(--line);border-radius:10px;background:#15233f;color:#e2ecff;height:36px;padding:0 12px;cursor:pointer;font-weight:700}
+    .modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    .mini-grid{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px;margin:12px 0 14px}
+    .mini{border:1px solid var(--line2);border-radius:12px;background:#111d35;padding:10px}
+    .mini b{display:block;font-size:22px;margin-top:4px}
+    .facts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+    .facts-card{border:1px solid var(--line2);border-radius:12px;background:#111d35;padding:12px}
+    .facts-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid #1f2d48}
+    .facts-row:last-child{border-bottom:0}
+    .facts-row span{color:var(--muted);font-size:13px}
+    .facts-row b{font-size:15px;text-align:right}
+    .warn-box{border:1px solid rgba(255,190,59,.35);background:linear-gradient(170deg,rgba(255,190,59,.17),rgba(255,190,59,.08));border-radius:12px;padding:10px 12px;margin-bottom:14px}
+    .confirm-card{width:min(560px,100%);border:1px solid #38548a;border-radius:16px;background:linear-gradient(175deg,#101c34,#0b1529);padding:16px;box-shadow:var(--shadow)}
+    .confirm-title{margin:0 0 10px;font-family:Sora,sans-serif;font-size:22px}
+    .confirm-sub{margin:0 0 8px;color:var(--muted);font-size:13px}
+    .confirm-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+    .notice{position:fixed;right:18px;bottom:18px;z-index:80;min-width:260px;max-width:420px;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:linear-gradient(170deg,#172744,#13223c);color:#e8f1ff;font-weight:700;opacity:0;transform:translateY(8px);pointer-events:none;transition:.2s}
+    .notice.show{opacity:1;transform:translateY(0)}
+    .notice.ok{border-color:#2f7d5f}
+    .notice.err{border-color:#7e3a50}
+    .ws-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2fd683;margin-right:6px;transition:background .4s;flex-shrink:0}
+    .ws-dot.warn{background:#ffbe3b}
+    .ws-dot.err{background:#ff5477}
+    .user-open-link{cursor:pointer}
+    .user-open-link:hover b{text-decoration:underline}
+    .status-cell{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:160px}
+    .status-row{display:flex;align-items:center;gap:8px}
+    .status-name{color:#8fa8d4;font-size:12px;min-width:72px}
+    .status-primary{display:inline-flex;align-items:center;justify-content:center;min-width:88px}
+    .user-shell{display:flex;flex-direction:column;gap:14px}
+    .user-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;border:1px solid var(--line2);background:linear-gradient(170deg,#132340,#0f1b34 60%);border-radius:16px;padding:14px}
+    .user-title{margin:0;font-family:Sora,sans-serif;font-size:30px;line-height:1.05}
+    .user-id{margin-top:6px;color:#9ab0d7;font-weight:700}
+    .user-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+    .meta-chip{display:inline-flex;align-items:center;gap:8px;padding:5px 10px;border:1px solid #2c436f;border-radius:999px;background:#12213a}
+    .meta-chip.multi{flex-wrap:wrap;max-width:100%}
+    .meta-chip .k{font-size:12px;color:#8ea6d2}
+    .user-actions{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+    .user-actions-row{display:flex;gap:8px}
+    .user-actions-row.ban-row{justify-content:flex-end}
+    .user-actions-row .btn{flex:1}
+    .user-kpi{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:10px}
+    .kpi-item{border:1px solid var(--line2);border-radius:12px;background:#101c34;padding:10px}
+    .kpi-item small{display:block;color:#8ea6d2;font-size:12px}
+    .kpi-item b{display:block;font-size:25px;line-height:1.05;margin-top:4px}
+    .kpi-item b.slim{font-size:16px}
+    .user-panels{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .user-card{border:1px solid var(--line2);border-radius:14px;background:#101c34;padding:12px}
+    .user-card h3{margin:0 0 8px;font-size:16px;font-family:Sora,sans-serif}
+    .dur-select{height:40px;background:#0d1828;border:1px solid var(--line);color:#e4edff;border-radius:10px;padding:0 10px;font-weight:700;font-family:Manrope,sans-serif;outline:none;cursor:pointer}
+    .act-divider{width:1px;background:var(--line);height:36px;margin:0 2px;flex-shrink:0}
+    input[type=checkbox]{cursor:pointer;accent-color:var(--blue);width:15px;height:15px}
+    @media (max-width:1300px){.stats-grid{grid-template-columns:repeat(3,minmax(160px,1fr))}.grid-2{grid-template-columns:1fr}.charts-row{grid-template-columns:1fr 1fr}.user-kpi{grid-template-columns:repeat(3,minmax(110px,1fr))}}
+    @media (max-width:1020px){.app{grid-template-columns:1fr!important}.sidebar{margin:12px 12px 0;max-height:none;position:static}.content{padding:12px}.stats-grid{grid-template-columns:repeat(2,minmax(140px,1fr))}.charts-row{grid-template-columns:1fr}.mini-grid{grid-template-columns:repeat(2,minmax(120px,1fr))}.facts{grid-template-columns:1fr}.page-current{display:none}.box{width:100%;max-height:96vh;padding:14px}.user-top{flex-direction:column}.user-panels{grid-template-columns:1fr}.user-kpi{grid-template-columns:repeat(2,minmax(110px,1fr))}}
+    /* pulse animation */
+    @keyframes pulseRing{0%,100%{box-shadow:0 0 0 0 rgba(47,214,131,.55)}60%{box-shadow:0 0 0 5px rgba(47,214,131,0)}}
+    .pulse::before{animation:pulseRing 2.2s ease infinite}
+    /* progress bar */
+    .progress-top{position:fixed;top:0;left:0;height:2px;width:0;background:linear-gradient(90deg,var(--blue),var(--cyan));z-index:200;transition:width .25s ease,opacity .3s ease;opacity:0;border-radius:0 2px 2px 0}
+    /* mode switcher */
+    .mode-switch{display:flex;background:#0d1828;border:1px solid var(--line);border-radius:10px;padding:3px;margin-left:24px}
+    .mode-btn{background:transparent;border:none;color:#6f84ad;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:.2s}
+    .mode-btn:hover{color:#b7caef}
+    .mode-btn.active{background:#1a2740;color:#e9f1ff;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+    /* colored user rows */
+    tr.row-blocked td{background:rgba(255,84,119,.06)!important}
+    tr.row-blocked td:first-child{border-left:3px solid var(--red)}
+    tr.row-violated td{background:rgba(255,190,59,.05)!important}
+    tr.row-violated td:first-child{border-left:3px solid var(--amber)}
+    /* colored log rows */
+    tr.log-block td:first-child{border-left:3px solid var(--red)}
+    tr.log-unblock td:first-child{border-left:3px solid var(--green)}
+    tr.log-violation td:first-child{border-left:3px solid var(--amber)}
+    tr.log-pending td:first-child{border-left:3px solid var(--blue)}
+    /* toast icons */
+    .notice.ok::before{content:"✓  ";color:var(--green)}
+    .notice.err::before{content:"✕  ";color:var(--red)}
+    /* sticky user header inside modal */
+    .user-top{position:sticky;top:-20px;z-index:4;margin:-2px -2px 0}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="progressTop" class="progress-top"></div>
+  <header class="topbar">
+    <div class="brand"><span class="brand-badge">⚡</span>FFXBan <span class="page-current" id="currentPage">Дашборд</span></div>
+    <div class="mode-switch" id="modeSwitch">
+      <button class="mode-btn active" data-mode="remnawave">Remnawave</button>
+      <button class="mode-btn" data-mode="3xui">3x-ui</button>
+    </div>
+    <div class="search-wrap">
+      <span>🔍</span>
+      <input id="globalSearch" placeholder="Поиск по email / ID..." autocomplete="off">
+    </div>
+    <div class="top-actions"><button class="btn" id="refreshBtn">Обновить</button><button class="btn warn" id="logoutBtn">Выход</button></div>
+  </header>
+  <div class="app" id="appGrid">
+    <aside class="sidebar" id="sidebar">
+      <div class="side-head">
+        <div class="side-head-text"><h2 class="side-title">Операционный центр</h2><p class="side-sub">FFXBan Monitoring</p></div>
+        <button class="sidebar-toggle" id="sidebarToggle" title="Свернуть">◀</button>
+      </div>
+      <nav class="nav">
+        <button class="menu active" data-p="dashboard" data-title="Дашборд"><i>◈</i><span class="menu-text">Дашборд</span></button>
+        <button class="menu" data-p="users" data-title="Пользователи"><i>◉</i><span class="menu-text">Подключенные пользователи</span></button>
+        <button class="menu" data-p="activebans" data-title="Активные баны"><i>🔒</i><span class="menu-text">Активные баны</span></button>
+        <button class="menu" data-p="pidarasy" data-title="Перманентный бан"><i>☠</i><span class="menu-text">Перманентный бан</span></button>
+        <button class="menu" data-p="net" data-title="Статистика по сетям"><i>◍</i><span class="menu-text">Статистика по сетям</span></button>
+        <button class="menu" data-p="shared" data-title="Общие IP"><i>⌁</i><span class="menu-text">Общие IP</span></button>
+        <button class="menu" data-p="logs" data-title="Логи"><i>☰</i><span class="menu-text">Логи</span></button>
+        <button class="menu" data-p="hwid" data-title="HWID мониторинг"><i>▦</i><span class="menu-text">HWID мониторинг</span></button>
+        <button class="menu" data-p="settings" data-title="Настройки"><i>⚙</i><span class="menu-text">Настройки</span></button>
+      </nav>
+      <div class="side-foot"><span class="pulse">Онлайн</span><span id="wsStatusLabel" style="display:flex;align-items:center"><span id="wsDot" class="ws-dot"></span><span id="wsText">live</span></span></div>
+    </aside>
+    <main class="content">
+
+      <!-- DASHBOARD -->
+      <section id="p-dashboard" class="page active">
+        <div class="stats-grid">
+          <div class="stat-card blue"><div class="stat-label">Пользователи</div><div class="stat-value" id="kUsers">0</div><div class="stat-hint">активные в системе</div></div>
+          <div class="stat-card green"><div class="stat-label">Онлайн</div><div class="stat-value" id="kActive">0</div><div class="stat-hint">за последние 3 минуты</div></div>
+          <div class="stat-card amber"><div class="stat-label">Нарушители</div><div class="stat-value" id="kViolators">0</div><div class="stat-hint">выше лимита</div></div>
+          <div class="stat-card red"><div class="stat-label">В бане</div><div class="stat-value" id="kBanned">0</div><div class="stat-hint">стабильное превышение</div></div>
+          <div class="stat-card cyan"><div class="stat-label">Ноды</div><div class="stat-value" id="kNodes">0</div><div class="stat-hint">источники событий</div></div>
+          <div class="stat-card"><div class="stat-label">Очереди</div><div class="stat-value" id="kQueue">0</div><div class="stat-hint">log + side effect</div></div>
+        </div>
+        <div class="charts-row">
+          <div class="panel"><h3>Статус пользователей</h3><div class="chart-wrap"><canvas id="chartStatus"></canvas></div></div>
+          <div class="panel"><h3>Типы подключений</h3><div class="chart-wrap"><canvas id="chartNetwork"></canvas></div></div>
+          <div class="panel"><h3>Состояние нод</h3><div class="chart-wrap"><canvas id="chartNodes"></canvas></div></div>
+        </div>
+        <div class="grid-2">
+          <div class="panel">
+            <h3>Системный статус</h3>
+            <div id="sysinfoBlock" style="margin-top:14px"></div>
+          </div>
+          <div class="panel">
+            <h3>Состояние серверов</h3>
+            <div class="table-wrap"><table><thead><tr><th>#</th><th>Сервер</th><th>Статус</th></tr></thead><tbody id="tbTopNodes"></tbody></table></div>
+          </div>
+        </div>
+        <div class="panel"><h3>Горячие пользователи</h3><div class="table-wrap"><table><thead><tr><th>Пользователь</th><th>IP</th><th>Лимит</th><th>Нода</th><th>Последняя активность</th><th>Статус</th><th>Активность</th></tr></thead><tbody id="tbHotUsers"></tbody></table></div></div>
+      </section>
+
+      <!-- USERS -->
+      <section id="p-users" class="page">
+        <div class="section-head"><div><h2>Подключенные пользователи</h2><p>Поиск и ручные действия по пользователям</p></div></div>
+        <div class="toolbar">
+          <input id="qUser" class="input" placeholder="Поиск по email, IP, ноде">
+          <select id="fState" class="select"><option value="all">Все статусы</option><option value="ok">Норма</option><option value="bad">Нарушение</option><option value="blocked">Заблокирован</option></select>
+          <select id="fNode" class="select"><option value="all">Последнее подключение: все</option></select>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>Пользователь</th><th>IP</th><th>Лимит</th><th>Источники</th><th>Триггеры</th><th>Нода</th><th>Последняя активность</th><th>Статус</th><th>Активность</th></tr></thead><tbody id="tbUsers"></tbody></table></div>
+        <div id="usersPager" class="pager"></div>
+      </section>
+
+      <!-- VIOLATORS -->
+      <section id="p-violators" class="page">
+        <div class="section-head">
+          <div><h2>Нарушители</h2><p>Пользователи с превышением лимита</p></div>
+          <div class="section-head-actions">
+            <button class="btn" id="exportViolatorsBtn">⬇ CSV</button>
+          </div>
+        </div>
+        <div class="bulk-bar" id="violBulkBar">
+          <span class="bulk-count" id="violBulkCount">0 выбрано</span>
+          <button class="btn danger" id="violBulkUnban">Разбанить выбранных</button>
+          <button class="btn" id="violBulkClear">Сбросить IP</button>
+          <button class="btn" style="margin-left:auto" id="violBulkDeselect">Снять выделение</button>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th class="th-check"><input type="checkbox" id="violCheckAll"></th><th>Пользователь</th><th>IP сейчас</th><th>Лимит</th><th>Триггеры</th><th>Нода</th><th>Время</th></tr></thead><tbody id="tbViolators"></tbody></table></div>
+      </section>
+
+      <!-- BAN LIST -->
+      <section id="p-ban" class="page">
+        <div class="section-head">
+          <div><h2>Бан-лист</h2><p>Пользователи со стабильным превышением</p></div>
+          <div class="section-head-actions">
+            <button class="btn" id="exportBanBtn">⬇ CSV</button>
+          </div>
+        </div>
+        <div class="bulk-bar" id="banBulkBar">
+          <span class="bulk-count" id="banBulkCount">0 выбрано</span>
+          <button class="btn danger" id="banBulkUnban">Разбанить выбранных</button>
+          <button class="btn" style="margin-left:auto" id="banBulkDeselect">Снять выделение</button>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th class="th-check"><input type="checkbox" id="banCheckAll"></th><th>Пользователь</th><th>IP</th><th>Лимит</th><th>Банов</th><th>Добавлен</th><th>Длительность</th></tr></thead><tbody id="tbBan"></tbody></table></div>
+      </section>
+
+      <!-- ACTIVE BANS -->
+      <section id="p-activebans" class="page">
+        <div class="section-head"><div><h2>Активные баны</h2><p>IP-баны с обратным отсчётом</p></div></div>
+        <div class="table-wrap"><table><thead><tr><th>IP</th><th>Пользователи</th><th>Нода</th><th>Установлен</th><th>Длительность</th><th>Осталось</th></tr></thead><tbody id="tbActiveBans"></tbody></table></div>
+      </section>
+
+      <!-- PERMANENT BAN -->
+      <section id="p-pidarasy" class="page"><div class="section-head"><div><h2>Перманентный бан</h2><p>Подтвержденный шаринг с перманентной блокировкой</p></div></div><div class="table-wrap"><table><thead><tr><th>Пользователь</th><th>IP</th><th>Лимит</th><th>Триггеры</th><th>Ноды</th><th>Навсегда с</th></tr></thead><tbody id="tbPidarasy"></tbody></table></div></section>
+
+      <!-- NETWORK STATS -->
+      <section id="p-net" class="page"><div class="section-head"><div><h2>Статистика по сетям</h2><p>Классификация: mobile / wifi / cable</p></div></div><div class="table-wrap"><table><thead><tr><th>Тип сети</th><th>Пользователей</th><th>IP</th><th>Провайдеры</th><th>Примеры IP</th></tr></thead><tbody id="tbNet"></tbody></table></div></section>
+
+      <!-- SHARED IPS -->
+      <section id="p-shared" class="page"><div class="section-head"><div><h2>Общие IP</h2><p>IP, которые используют несколько пользователей</p></div></div><div class="table-wrap"><table><thead><tr><th>IP</th><th>Пользователей</th><th>Email</th></tr></thead><tbody id="tbShared"></tbody></table></div></section>
+
+      <!-- LOGS -->
+      <section id="p-logs" class="page">
+        <div class="section-head"><div><h2>Логи</h2><p>Последние события активности и блокировок</p></div></div>
+        <div class="log-filter">
+          <span class="lf-label">Фильтр:</span>
+          <label><input type="checkbox" class="lf-cb" data-cat="block" checked>BLOCK</label>
+          <label><input type="checkbox" class="lf-cb" data-cat="violation" checked>VIOLATION</label>
+          <label><input type="checkbox" class="lf-cb" data-cat="pending" checked>PENDING</label>
+          <label><input type="checkbox" class="lf-cb" data-cat="info" checked>INFO</label>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th>Время</th><th>Email</th><th>Тип</th><th>IP</th><th>Нода</th><th>Описание</th></tr></thead><tbody id="tbLogs"></tbody></table></div>
+      </section>
+
+      <!-- HWID -->
+      <section id="p-hwid" class="page"><div class="section-head"><div><h2>HWID мониторинг</h2><p>Оценка по реальным IP против лимитов</p></div></div><div class="table-wrap"><table><thead><tr><th>Email</th><th>В системе</th><th>Лимит</th><th>Статус</th></tr></thead><tbody id="tbHwid"></tbody></table></div></section>
+
+      <!-- SETTINGS -->
+      <section id="p-settings" class="page">
+        <div class="section-head"><div><h2>Настройки</h2><p>Безопасность и конфигурация</p></div></div>
+        <div class="panel" style="margin-bottom:14px">
+          <h3>Сменить пароль</h3>
+          <div class="toolbar">
+            <input id="curPass" type="password" class="input" placeholder="Текущий пароль">
+            <input id="newPass" type="password" class="input" placeholder="Новый пароль (мин. 8)">
+            <input id="newPass2" type="password" class="input" placeholder="Повтор нового пароля">
+            <button class="btn primary" id="changePassBtn">Сменить пароль</button>
+          </div>
+          <p id="passMsg" class="muted"></p>
+        </div>
+        <div class="panel">
+          <h3>Конфигурация системы <span style="font-size:12px;color:var(--muted);font-weight:600">(только чтение)</span></h3>
+          <div id="cfgPanel"><p class="muted">Загрузка...</p></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="auth" class="auth active"><div class="login"><h2 style="margin:0;font-family:Sora,sans-serif;font-size:26px">Вход в панель</h2><p class="muted" style="margin:8px 0 14px">Введите пароль администратора</p><input id="loginPass" type="password" class="input" style="width:100%" placeholder="Пароль"><div style="display:flex;gap:8px;margin-top:12px"><button class="btn primary" id="loginBtn">Войти</button></div><p id="authMsg" class="muted"></p></div></div>
+  <div id="modal" class="modal"><div class="box"><button class="close" id="closeM">Закрыть</button><h2 id="mTitle" style="margin:2px 0 12px;font-family:Sora,sans-serif">Карточка</h2><div id="mBody"></div></div></div>
+  <div id="confirmModal" class="auth">
+    <div class="confirm-card">
+      <h3 id="confirmTitle" class="confirm-title">Подтвердите действие</h3>
+      <p id="confirmSub" class="confirm-sub">Причина (опционально):</p>
+      <input id="confirmReason" class="input" style="width:100%" placeholder="manual">
+      <div class="confirm-actions">
+        <button class="btn" id="confirmCancel">Отменить</button>
+        <button class="btn primary" id="confirmOk">ДА</button>
+      </div>
+    </div>
+  </div>
+  <div id="notice" class="notice"></div>
+
+  <script>
+    let stats={}, users=[], nodes=[], logs=[], activeBans=[], sharingBanUsers=[], permanentSharers=[], nodeHealth=[], networkTypes=[], cfgData={}, sysinfo={};
+    let usersPage = 0;
+    const USERS_PAGE_SIZE = 50;
+    let appMode = localStorage.getItem('ffx_mode') || 'remnawave';
+    let chartStatus=null, chartNetwork=null, chartNodes=null;
+    let loadInFlight = false;
+    let openCardId = null;  // ID карточки открытой в модале (null = закрыта)
+    // WebSocket
+    let wsConn = null;
+    let wsReconnectTimer = null;
+    let wsReconnectDelay = 1000;
+    let wsFailCount = 0;
+    // Polling fallback (используется только если WS недоступен)
+    let autoRefreshTimer = null;
+    const autoRefreshMs = 10000;
+    let violatorSel = new Set();
+    let banSel = new Set();
+    const logFilters = new Set(['block','violation','pending','info']);
+    const prevStatVals = {};
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+    const netTypeName = t => { const tp=String(t||"unknown").toLowerCase(); if(tp==="mobile")return"Сотовый"; if(tp==="wifi")return"Wi-Fi"; if(tp==="cable")return"Кабельный"; return"Неизвестно"; };
+    const isBadDate = d => Number.isNaN(d.getTime()) || d.getUTCFullYear() < 2000 || d.getTime() > Date.now() + 5*60*1000;
+    const api = async (url, opts={}) => {
+      const r = await fetch(url,{credentials:"include",headers:{"Content-Type":"application/json",...(opts.headers||{})},...opts});
+      if(!r.ok){
+        let msg = `HTTP ${r.status}`;
+        try{ const j=await r.json(); msg=j.error||j.message||msg; }catch{}
+        throw new Error(msg);
+      }
+      if(r.status===204) return null;
+      return r.json();
+    };
+
+    const showNotice = (message, kind="ok") => {
+      const n = $("notice");
+      if(!n) return;
+      n.textContent = String(message || "");
+      n.className = `notice ${kind} show`;
+      clearTimeout(showNotice.timer);
+      showNotice.timer = setTimeout(()=>n.classList.remove("show"), 2800);
+    };
+    const progressBar = {
+      _tmr: null,
+      start(){ const el=$("progressTop"); if(!el) return; el.style.transition="none"; el.style.width="0"; el.style.opacity="1"; requestAnimationFrame(()=>{ el.style.transition="width .6s ease"; el.style.width="70%"; }); },
+      done(){ const el=$("progressTop"); if(!el) return; el.style.width="100%"; clearTimeout(this._tmr); this._tmr=setTimeout(()=>{ el.style.opacity="0"; setTimeout(()=>{ el.style.width="0"; el.style.opacity="1"; },300); },300); }
+    };
+
+    function setMode(mode){
+      appMode = mode;
+      localStorage.setItem('ffx_mode', mode);
+      document.querySelectorAll('.mode-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+      load(false);
+    }
+    
+    document.querySelectorAll('.mode-btn').forEach(b => {
+      b.onclick = () => setMode(b.dataset.mode);
+    });
+    // Init mode UI
+    setMode(appMode);
+    const countByTypes = (events, types) => {
+      const set = new Set(types || []);
+      return (events || []).filter(e => set.has(String(e?.type || ""))).length;
+    };
+    const t = s => {
+      if(!s) return "-";
+      const d = new Date(s);
+      return isBadDate(d) ? "-" : d.toLocaleString("ru-RU");
+    };
+    const until = s => {
+      if(!s) return "-";
+      const d = new Date(s);
+      if(isBadDate(d)) return "-";
+      const sec = Math.max(0, Math.floor((d.getTime() - Date.now())/1000));
+      if(sec === 0) return "истёк";
+      if(sec < 60) return `${sec} сек`;
+      const min = Math.floor(sec/60);
+      if(min < 60) return `${min} мин ${sec%60} сек`;
+      const hr = Math.floor(min/60);
+      return `${hr} ч ${min%60} мин`;
+    };
+    const pickValidTime = (...values) => {
+      for (const v of values) {
+        if (!v) continue;
+        const d = new Date(v);
+        if (!isBadDate(d)) return v;
+      }
+      return "";
+    };
+    const rel = s => {
+      if(!s) return "-";
+      const d = new Date(s);
+      if(isBadDate(d)) return "-";
+      const sec = Math.max(0, Math.floor((Date.now() - d.getTime())/1000));
+      if(sec < 60) return `${sec} сек назад`;
+      const min = Math.floor(sec/60);
+      if(min < 60) return `${min} мин назад`;
+      const hr = Math.floor(min/60);
+      if(hr < 24) return `${hr} ч назад`;
+      return `${Math.floor(hr/24)} дн назад`;
+    };
+    const displayName = u => (u.username && String(u.username).trim()) ? String(u.username).trim() : String(u.user_identifier ?? "");
+    const sub = ip => { const p=String(ip).split("."); return p.length===4?`${p[0]}.${p[1]}.${p[2]}.0/24`:ip; };
+    const renderActivityBadge = online => online
+      ? '<span class="badge b-green status-primary">Онлайн</span>'
+      : '<span class="badge status-primary">Оффлайн</span>';
+    const renderSafetyBadge = exceeds => exceeds
+      ? '<span class="badge b-red status-primary">Нарушение</span>'
+      : '<span class="badge b-green status-primary">Норма</span>';
+    const renderStatusBadge = u => {
+      if (u && u.blocked) return '<span class="badge b-red status-primary">Заблокирован</span>';
+      return renderSafetyBadge(!!u?.exceeds);
+    };
+    const renderUserCell = (userId, explicitName="") => {
+      const id = String(userId ?? "").trim();
+      const known = (users || []).find(u => String(u?.user_identifier ?? "") === id);
+      const name = String(explicitName || (known ? displayName(known) : id || "-")).trim() || "-";
+      const sub = id && name !== id ? id : (id && id !== "-" ? id : "");
+      if (!id || id === "-") {
+        return `<b>${esc(name)}</b>${sub ? `<div class="muted" style="font-size:12px">${esc(sub)}</div>` : ""}`;
+      }
+      return `<div class="user-open-link" data-u="${esc(id)}"><b>${esc(name)}</b>${sub ? `<div class="muted" style="font-size:12px">${esc(sub)}</div>` : ""}</div>`;
+    };
+    const bindUserOpenLinks = (rootEl) => {
+      if(!rootEl) return;
+      rootEl.querySelectorAll(".user-open-link[data-u]").forEach(el=>{
+        el.onclick = (e)=>{
+          e.preventDefault();
+          e.stopPropagation();
+          const id = String(el.dataset.u || "").trim();
+          if(id) openUser(id);
+        };
+      });
+    };
+
+    function animateStat(id, value) {
+      const el = $(id);
+      if (!el) return;
+      const newVal = String(value);
+      if (prevStatVals[id] !== undefined && prevStatVals[id] !== newVal) {
+        el.classList.remove('stat-anim');
+        void el.offsetWidth;
+        el.classList.add('stat-anim');
+        setTimeout(()=>el.classList.remove('stat-anim'), 400);
+      }
+      el.textContent = newVal;
+      prevStatVals[id] = newVal;
+    }
+
+    function toggleSidebar(){
+      const sidebar = $("sidebar");
+      const app = $("appGrid");
+      const btn = $("sidebarToggle");
+      sidebar.classList.toggle('collapsed');
+      app.classList.toggle('sidebar-collapsed');
+      btn.textContent = sidebar.classList.contains('collapsed') ? '▶' : '◀';
+    }
+
+    function globalSearch(){
+      const q = $("globalSearch").value.trim().toLowerCase();
+      if(!q) return;
+      const found = (users||[]).find(u =>
+        String(u.user_identifier||"").toLowerCase().includes(q) ||
+        String(u.username||"").toLowerCase().includes(q)
+      );
+      if(found){
+        openUser(found.user_identifier);
+      } else {
+        // try direct open by raw input
+        openUser($("globalSearch").value.trim());
+      }
+      $("globalSearch").value = "";
+    }
+
+    async function askReason(title, subtitle, defaultReason=""){
+      return new Promise(resolve => {
+        const modal = $("confirmModal");
+        const input = $("confirmReason");
+        const okBtn = $("confirmOk");
+        const cancelBtn = $("confirmCancel");
+        $("confirmTitle").textContent = title;
+        $("confirmSub").textContent = subtitle;
+        input.value = defaultReason;
+        const close = (value) => {
+          modal.classList.remove("active");
+          okBtn.onclick = null;
+          cancelBtn.onclick = null;
+          modal.onclick = null;
+          input.onkeydown = null;
+          resolve(value);
+        };
+        okBtn.onclick = () => close(input.value.trim());
+        cancelBtn.onclick = () => close(null);
+        modal.onclick = (e) => { if (e.target === modal) close(null); };
+        input.onkeydown = (e) => {
+          if (e.key === "Enter") { e.preventDefault(); close(input.value.trim()); }
+          if (e.key === "Escape") close(null);
+        };
+        modal.classList.add("active");
+        setTimeout(()=>input.focus(), 0);
+      });
+    }
+
+    function updateWsStatus(state){
+      const dot=$('wsDot'), txt=$('wsText');
+      if(!dot||!txt) return;
+      if(state==='connected'){ dot.className='ws-dot'; txt.textContent='live'; dot.title='WebSocket активен'; }
+      else if(state==='reconnecting'){ dot.className='ws-dot warn'; txt.textContent='reconnect...'; dot.title='Переподключение...'; }
+      else { dot.className='ws-dot err'; txt.textContent='polling'; dot.title='Используется polling'; }
+    }
+
+    function connectWS(){
+      if(wsConn) return;
+      const proto = location.protocol==='https:' ? 'wss' : 'ws';
+      wsConn = new WebSocket(`${proto}://${location.host}/api/ws`);
+      wsConn.onopen = ()=>{ wsReconnectDelay=1000; wsFailCount=0; updateWsStatus('connected'); stopAutoRefresh(); };
+      wsConn.onmessage = (e)=>{ try{ const m=JSON.parse(e.data); if(m.type==='refresh') load(true); }catch{} };
+      wsConn.onclose = ()=>{
+        wsConn=null;
+        wsFailCount++;
+        if(wsFailCount>=3){ updateWsStatus('polling'); startAutoRefresh(); }
+        else{ updateWsStatus('reconnecting'); wsReconnectTimer=setTimeout(connectWS, wsReconnectDelay); wsReconnectDelay=Math.min(wsReconnectDelay*2,30000); }
+      };
+      wsConn.onerror = ()=>{};
+    }
+
+    function startAutoRefresh(){
+      if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+      autoRefreshTimer = setInterval(async () => {
+        if (document.visibilityState !== "visible") return;
+        if ($("auth").classList.contains("active")) return;
+        await load(true);
+      }, autoRefreshMs);
+    }
+
+    function stopAutoRefresh(){
+      if (!autoRefreshTimer) return;
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+
+    async function checkAuth(){
+      try{
+        await api("/api/panel/me");
+        $("auth").classList.remove("active");
+        await load(true);
+        connectWS();
+      }catch{
+        $("auth").classList.add("active");
+      }
+    }
+
+    async function login(){
+      $("authMsg").textContent="";
+      try{
+        await api("/api/panel/login",{method:"POST",body:JSON.stringify({password:$("loginPass").value})});
+        $("auth").classList.remove("active");
+        await load(true);
+        connectWS();
+      }catch{
+        $("authMsg").textContent="Неверный пароль";
+      }
+    }
+
+    async function logout(){
+      try{ await api("/api/panel/logout",{method:"POST"}); }catch{}
+      stopAutoRefresh();
+      if(wsConn){ wsConn.close(); wsConn=null; }
+      if(wsReconnectTimer){ clearTimeout(wsReconnectTimer); wsReconnectTimer=null; }
+      $("auth").classList.add("active");
+    }
+
+    async function load(silent=false){
+      if (loadInFlight) return;
+      loadInFlight = true;
+      if(!silent) progressBar.start();
+      try{
+        if (appMode === '3xui') {
+           // 3x-ui Data Fetching
+           const [u3, s3, l, ab, sb, ps, nh, nt, cd, si] = await Promise.all([
+             api("/api/3xui/users?online_only=true"),
+             api("/api/3xui/servers").catch(()=>[]),
+             api("/api/logs?limit=500").catch(()=>[]),
+             api("/api/bans/active?limit=2000").catch(()=>[]),
+             api("/api/banlist/users?limit=2000").catch(()=>[]),
+             api("/api/sharing/permanent?limit=2000").catch(()=>[]),
+             api("/api/nodes/health").catch(()=>[]),
+             api("/api/networks/types").catch(()=>[]),
+             api("/api/config").catch(()=>({})),
+             api("/api/sysinfo").catch(()=>({}))
+           ]);
+           
+           console.log("Loaded 3x-ui users:", u3 ? u3.length : "null");
+           if(u3 && u3.length > 0) showNotice(`Загружено ${u3.length} пользователей (3x-ui)`, "ok");
+           else showNotice("Внимание: API 3x-ui вернул 0 пользователей", "err");
+
+           // Adapt 3x-ui users to internal format
+           users = u3.map(u => ({
+             user_identifier: u.email, // Use email as ID for blocking
+             username: u.remark || u.email,
+             email: u.email,
+             uuid: u.uuid,
+             limit: u.limit_ip || 0, // IP Limit from 3x-ui
+             traffic_limit: u.limit, // Traffic Limit (bytes)
+             ip_count: u.ip_count || 0,
+             online: !!u.online,
+             blocked: !u.enable,
+             last_node_display: u.server_name,
+             last_seen_at: null, // 3x-ui doesn't give last seen easily
+             traffic_total: u.total,
+             traffic_up: u.up,
+             traffic_down: u.down,
+             expiry_time: u.expiry_time,
+             is_3xui: true
+           }));
+           
+           // Mock stats from aggregated data
+           stats = {
+             active_users_count: users.filter(u=>u.online).length,
+             total_users: users.length,
+             violators_count: 0, // Need logic
+             banned_count: users.filter(u=>u.blocked).length
+           };
+           nodes = s3.map(s => ({ id: s.name, name: s.name }));
+           logs = l;
+           activeBans = ab;
+           sharingBanUsers = sb;
+           permanentSharers = ps;
+           nodeHealth = s3.map(s => ({
+             node_name: s.name,
+             online: s.status === 'online',
+             last_traffic_at: s.status === 'online' ? new Date().toISOString() : null
+           }));
+           networkTypes = nt;
+           cfgData = cd;
+           sysinfo = si;
+
+        } else {
+          // Remnawave Data Fetching (Original)
+          [stats, users, nodes, logs, activeBans, sharingBanUsers, permanentSharers, nodeHealth, networkTypes, cfgData, sysinfo] = await Promise.all([
+            api("/api/stats"),
+            api("/api/users?limit=2000&panel_only=true"),
+            api("/api/nodes").catch(()=>[]),
+            api("/api/logs?limit=500").catch(()=>[]),
+            api("/api/bans/active?limit=2000").catch(()=>[]),
+            api("/api/banlist/users?limit=2000").catch(()=>[]),
+            api("/api/sharing/permanent?limit=2000").catch(()=>[]),
+            api("/api/nodes/health").catch(()=>[]),
+            api("/api/networks/types").catch(()=>[]),
+            api("/api/config").catch(()=>({})),
+            api("/api/sysinfo").catch(()=>({}))
+          ]);
+          console.log("Loaded Remnawave users:", users ? users.length : "null");
+          if(users && users.length === 0) showNotice("Внимание: API вернул 0 пользователей", "warn");
+        }
+        
+        render();
+        if (openCardId && $("modal").classList.contains("active")) {
+          refreshOpenCard();
+        }
+      }catch(e){
+        if (!silent) showNotice("Ошибка загрузки API: "+e.message, "err");
+      } finally {
+        loadInFlight = false;
+        if(!silent) progressBar.done();
+      }
+    }
+
+    async function refreshOpenCard(){
+      if (!openCardId) return;
+      const box = $("modal").querySelector(".box");
+      const scrollTop = box ? box.scrollTop : 0;
+      await openUser(openCardId, true);
+      if (box) box.scrollTop = scrollTop;
+    }
+
+    const fmtBytes = (b) => {
+      if(!b) return "0 B";
+      const units=["B","KB","MB","GB"];
+      let i=0; b=Number(b);
+      while(b>=1024&&i<units.length-1){b/=1024;i++;}
+      return b.toFixed(i?1:0)+" "+units[i];
+    };
+    const barCls = (pct) => pct>=90?"crit":pct>=70?"warn":"ok";
+    const sysBar = (pct) => {
+      const p=Math.min(100,Math.max(0,pct));
+      return `<div class="sys-bar"><div class="sys-bar-fill ${barCls(p)}" style="width:${p}%"></div></div>
+              <div class="sys-bar-label"><span>${p.toFixed(1)}%</span></div>`;
+    };
+
+    function renderSysinfo(){
+      const el=$("sysinfoBlock");
+      if(!el||!sysinfo||!sysinfo.ram) return;
+      const {go={},ram={},cpu={},uptime={},disk={},redis={}} = sysinfo;
+
+      // RAM
+      const ramTotal=Number(ram.total||0), ramUsed=Number(ram.used||0), ramAvail=Number(ram.available||0);
+      const ramPct=ramTotal?ramUsed*100/ramTotal:0;
+      const ramCard=`<div class="sys-card" style="--sys-accent:#12c9e8">
+        <h4>Оперативная память</h4>
+        ${sysBar(ramPct)}
+        <div class="sys-row"><span>Всего</span><b>${fmtBytes(ramTotal)}</b></div>
+        <div class="sys-row"><span>Использовано</span><b>${fmtBytes(ramUsed)}</b></div>
+        <div class="sys-row"><span>Доступно</span><b>${fmtBytes(ramAvail)}</b></div>
+        <div class="sys-row"><span>Кэш</span><b>${fmtBytes(Number(ram.cached||0))}</b></div>
+      </div>`;
+
+      // Disk
+      const dkTotal=Number(disk.total||0), dkUsed=Number(disk.used||0), dkAvail=Number(disk.avail||0);
+      const dkPct=parseFloat(disk.used_pct||0);
+      const diskCard=`<div class="sys-card" style="--sys-accent:#ffbe3b">
+        <h4>Диск /</h4>
+        ${sysBar(dkPct)}
+        <div class="sys-row"><span>Всего</span><b>${fmtBytes(dkTotal)}</b></div>
+        <div class="sys-row"><span>Занято</span><b>${fmtBytes(dkUsed)}</b></div>
+        <div class="sys-row"><span>Свободно</span><b>${fmtBytes(dkAvail)}</b></div>
+        <div class="sys-row"><span>Аптайм</span><b>${uptime.uptime_human||"-"}</b></div>
+      </div>`;
+
+      // CPU / Load
+      const cpuPct=Math.min(100, parseFloat(cpu.load1||0) / (go.num_cpu||1) * 100);
+      const cpuCard=`<div class="sys-card" style="--sys-accent:#24c47a">
+        <h4>CPU / Нагрузка</h4>
+        ${sysBar(cpuPct)}
+        <div class="sys-row"><span>Нагрузка 1м</span><b>${cpu.load1||"-"}</b></div>
+        <div class="sys-row"><span>Нагрузка 5м</span><b>${cpu.load5||"-"}</b></div>
+        <div class="sys-row"><span>Нагрузка 15м</span><b>${cpu.load15||"-"}</b></div>
+        <div class="sys-row"><span>Ядер CPU</span><b>${go.num_cpu||"-"}</b></div>
+        <div class="sys-row"><span>Горутины Go</span><b>${go.goroutines||0}</b></div>
+        <div class="sys-row"><span>Версия Go</span><b>${go.go_version||"-"}</b></div>
+      </div>`;
+
+      // Go heap
+      const heapUsed=Number(go.heap_inuse||0), heapSys=Number(go.heap_sys||0);
+      const heapPct=heapSys?heapUsed*100/heapSys:0;
+      const goCard=`<div class="sys-card" style="--sys-accent:#4f71ff">
+        <h4>Go Runtime (heap)</h4>
+        ${sysBar(heapPct)}
+        <div class="sys-row"><span>Heap занято</span><b>${fmtBytes(heapUsed)}</b></div>
+        <div class="sys-row"><span>Heap выделено</span><b>${fmtBytes(Number(go.heap_alloc||0))}</b></div>
+        <div class="sys-row"><span>Heap всего</span><b>${fmtBytes(heapSys)}</b></div>
+        <div class="sys-row"><span>Стек</span><b>${fmtBytes(Number(go.stack_inuse||0))}</b></div>
+        <div class="sys-row"><span>Запусков GC</span><b>${go.gc_runs||0}</b></div>
+      </div>`;
+
+      // Redis
+      const rUsed=Number(redis.used_memory||0), rMax=Number(redis.maxmemory||0);
+      const rPct=rMax?rUsed*100/rMax:0;
+      const rPeak=Number(redis.used_memory_peak||0);
+      const rClients=redis.connected_clients||"-";
+      const rUptime=redis.uptime_in_seconds?formatSeconds(Number(redis.uptime_in_seconds)):"-";
+      const rHits=Number(redis.keyspace_hits||0), rMisses=Number(redis.keyspace_misses||0);
+      const rHitRate=rHits+rMisses>0?(rHits*100/(rHits+rMisses)).toFixed(1)+"%":"—";
+      const redisCard=`<div class="sys-card" style="grid-column:1/-1;--sys-accent:#ff5477">
+        <h4>Redis</h4>
+        ${rMax?sysBar(rPct):""}
+        <div class="sys-grid" style="margin-top:6px">
+          <div>
+            <div class="sys-row"><span>Память</span><b>${redis.used_memory_human||fmtBytes(rUsed)}</b></div>
+            <div class="sys-row"><span>Пик памяти</span><b>${redis.used_memory_peak_human||fmtBytes(rPeak)}</b></div>
+            <div class="sys-row"><span>Лимит</span><b>${rMax?fmtBytes(rMax):"без лимита"}</b></div>
+            <div class="sys-row"><span>Версия</span><b>${redis.redis_version||"-"}</b></div>
+          </div>
+          <div>
+            <div class="sys-row"><span>Клиенты</span><b>${rClients}</b></div>
+            <div class="sys-row"><span>Аптайм</span><b>${rUptime}</b></div>
+            <div class="sys-row"><span>Команд/сек</span><b>${redis.instantaneous_ops_per_sec||"0"}</b></div>
+            <div class="sys-row"><span>Попаданий</span><b>${rHitRate}</b></div>
+          </div>
+        </div>
+      </div>`;
+
+      el.innerHTML=`<div class="sys-grid">${ramCard}${diskCard}${cpuCard}${goCard}${redisCard}</div>`;
+    }
+
+    function formatSeconds(s){
+      const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);
+      if(d>0) return d+"д "+h+"ч "+m+"м";
+      if(h>0) return h+"ч "+m+"м";
+      return m+"м";
+    }
+
+    function render(){
+      const viol = users.filter(u=>u.exceeds);
+      const ban = Array.isArray(sharingBanUsers) && sharingBanUsers.length > 0
+        ? sharingBanUsers
+        : (Array.isArray(activeBans) ? activeBans : []);
+      const nodesSet = new Set((Array.isArray(nodeHealth)?nodeHealth:[]).map(n=>n.node_name).filter(Boolean));
+      const online = users.filter(u=>u.online).length;
+      const queueTotal = (stats.log_queue_len||0) + (stats.side_effect_queue_len||0);
+
+      animateStat("kUsers", users.length);
+      animateStat("kActive", online);
+      animateStat("kViolators", viol.length);
+      animateStat("kBanned", stats.sharing_banlist_users ?? ban.length);
+      animateStat("kNodes", nodesSet.size);
+      animateStat("kQueue", queueTotal);
+
+      renderNodeFilter();
+      renderTopNodes();
+      renderHotUsers();
+      renderUsers();
+      renderViolators(viol);
+      renderBan();
+      renderActiveBans();
+      renderPidarasy();
+      renderNet();
+      renderShared();
+      renderLogs();
+      renderHwid();
+      renderCharts();
+      renderConfig();
+      renderSysinfo();
+    }
+
+    function displayNodeName(raw){
+      const key = String(raw || "").trim();
+      if(!key) return "-";
+      const found = (nodes||[]).find(n => String(n?.id||"").trim() === key);
+      return found?.name || key;
+    }
+
+    function isUnknownNodeValue(raw){
+      const v = String(raw ?? "").trim().toLowerCase();
+      return !v || v==="unknown" || v==="-" || v==="n/a" || v==="none" || v==="null";
+    }
+
+    function resolveNodeLabel(displayValue, rawValue){
+      if(!isUnknownNodeValue(displayValue)){
+        return String(displayValue).trim();
+      }
+      if(!isUnknownNodeValue(rawValue)){
+        return displayNodeName(rawValue);
+      }
+      return "unknown";
+    }
+
+    function renderTopNodes(){
+      const rows = Array.isArray(nodeHealth) ? nodeHealth : [];
+      const colName = appMode === '3xui' ? 'Сервер' : 'Нода';
+      $("tbTopNodes").innerHTML = rows.map((r,idx)=>`<tr>
+        <td>${idx+1}</td>
+        <td>${esc(r.node_name || r.node_id || "-")}</td>
+        <td>${r.online?'<span class="badge b-green">online</span>':'<span class="badge b-red">offline</span>'}
+          <span class="muted" style="margin-left:6px">${rel(pickValidTime(r.last_traffic_at, r.last_blocker_heartbeat_at, r.last_blocker_action_at))}</span>
+        </td>
+      </tr>`).join("") || `<tr><td colspan="3" class="muted">Нет данных</td></tr>`;
+      
+      const thNode = document.querySelector("#tbTopNodes").closest("table").querySelector("th:nth-child(2)");
+      if(thNode) thNode.textContent = colName;
+    }
+
+    function renderHotUsers(){
+      const rows = [...users]
+        .sort((a,b)=>{
+          if((b.blocked?1:0)!==(a.blocked?1:0)) return (b.blocked?1:0)-(a.blocked?1:0);
+          if((b.exceeds?1:0)!==(a.exceeds?1:0)) return (b.exceeds?1:0)-(a.exceeds?1:0);
+          return (b.ip_count||0)-(a.ip_count||0);
+        })
+        .slice(0,10);
+      $("tbHotUsers").innerHTML = rows.map(u=>{
+        const node = resolveNodeLabel(u.last_node_display, u.last_node);
+        return `<tr class="row-click" data-u="${esc(u.user_identifier)}"><td><b>${esc(displayName(u))}</b><div class="muted" style="font-size:12px">${esc(u.user_identifier||"")}</div></td><td><span class="badge b-blue">${u.ip_count}</span></td><td>${u.limit}</td><td>${esc(node)}</td><td>${rel(u.last_seen_at || u.heuristics?.last_event_at)}</td><td>${renderStatusBadge(u)}</td><td>${renderActivityBadge(u.online)}</td></tr>`;
+      }).join("") || `<tr><td colspan="7" class="muted">Нет данных</td></tr>`;
+      $("tbHotUsers").querySelectorAll("tr.row-click").forEach(tr=>tr.onclick=()=>openUser(tr.dataset.u));
+    }
+
+    function renderNodeFilter(){
+      const sel = $("fNode");
+      const prev = sel.value || "all";
+      const nameSet = new Set();
+      (nodes||[]).forEach(n => { if(n && n.name) nameSet.add(String(n.name)); });
+      users.forEach(u => {
+        const n = String(resolveNodeLabel(u.last_node_display, u.last_node) || "").trim();
+        if(n) nameSet.add(n);
+      });
+      const sorted = [...nameSet].sort((a,b)=>a.localeCompare(b,"ru"));
+      sel.innerHTML = `<option value="all">Последнее подключение: все</option>` + sorted.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+      sel.value = sorted.includes(prev) ? prev : "all";
+    }
+
+    function filteredUsers(){
+      const q=$("qUser").value.trim().toLowerCase();
+      const st=$("fState").value;
+      const nf=$("fNode").value;
+      return users.filter(u=>{
+        if(st==="ok" && (u.exceeds || u.blocked)) return false;
+        if(st==="bad" && !(u.exceeds && !u.blocked)) return false;
+        if(st==="blocked" && !u.blocked) return false;
+        const node = resolveNodeLabel(u.last_node_display, u.last_node);
+        if(nf!=="all" && node!==nf) return false;
+        if(!q) return true;
+        return displayName(u).toLowerCase().includes(q) || String(u.user_identifier||"").toLowerCase().includes(q) || node.toLowerCase().includes(q) || (u.active_ips||[]).some(ip=>ip.includes(q));
+      });
+    }
+
+    function renderUsers(){
+      const all = filteredUsers();
+      const total = all.length;
+      const totalPages = Math.max(1, Math.ceil(total / USERS_PAGE_SIZE));
+      if(usersPage >= totalPages) usersPage = totalPages - 1;
+      const start = usersPage * USERS_PAGE_SIZE;
+      const rows = all.slice(start, start + USERS_PAGE_SIZE);
+
+      $("tbUsers").innerHTML = rows.map((u,i)=>{
+        const name = displayName(u);
+        const idLine = name !== String(u.user_identifier) ? `<div class="muted" style="font-size:12px">${esc(u.user_identifier)}</div>` : "";
+        const activity = u.is_3xui ? (u.traffic_total ? fmtBytes(u.traffic_total) : "-") : rel(u.last_seen_at || u.heuristics?.last_event_at);
+        const sharing = u.sharing || null;
+        const concurrent = sharing ? `${sharing.concurrent_ips}/${sharing.concurrent_limit}` : "-";
+        const triggers = sharing ? `${sharing.trigger_hits}/${sharing.trigger_required}` : "-";
+        const node = resolveNodeLabel(u.last_node_display, u.last_node);
+        const rowCls = u.blocked ? "row-click row-blocked" : (u.exceeds ? "row-click row-violated" : "row-click");
+        const colIp = (u.is_3xui && (!u.ip_count || u.ip_count === 0))
+          ? `<span class="badge b-cyan">API</span>`
+          : `<span class="badge b-blue">${u.ip_count}</span>`;
+        const colLimit = u.is_3xui ? (u.limit ? u.limit : "∞") : `<span class="badge b-amber">${u.limit}</span>`;
+        return `<tr class="${rowCls}" data-u="${esc(u.user_identifier)}"><td>${start+i+1}</td><td><b>${esc(name)}</b>${idLine}</td><td>${colIp}</td><td>${colLimit}</td><td>${esc(concurrent)}</td><td>${esc(triggers)}</td><td>${esc(node)}</td><td>${activity}</td><td>${renderStatusBadge(u)}</td><td>${renderActivityBadge(u.online)}</td></tr>`;
+      }).join("") || `<tr><td colspan="10" class="muted">Нет данных</td></tr>`;
+      $("tbUsers").querySelectorAll("tr.row-click").forEach(tr=>tr.onclick=()=>openUser(tr.dataset.u));
+
+      // Pagination controls
+      const pager = $("usersPager");
+      if(total <= USERS_PAGE_SIZE){ pager.innerHTML=""; return; }
+      const from = total ? start+1 : 0, to = Math.min(start+USERS_PAGE_SIZE, total);
+      let btns = `<span class="pager-info">Показано ${from}–${to} из ${total}</span>`;
+      btns += `<button class="pager-btn" onclick="usersPage=0;renderUsers()" ${usersPage===0?"disabled":""}>«</button>`;
+      btns += `<button class="pager-btn" onclick="usersPage--;renderUsers()" ${usersPage===0?"disabled":""}>‹</button>`;
+      const winStart = Math.max(0, usersPage-2), winEnd = Math.min(totalPages, winStart+5);
+      for(let p=winStart;p<winEnd;p++){
+        btns += `<button class="pager-btn${p===usersPage?" active":""}" onclick="usersPage=${p};renderUsers()">${p+1}</button>`;
+      }
+      btns += `<button class="pager-btn" onclick="usersPage++;renderUsers()" ${usersPage===totalPages-1?"disabled":""}>›</button>`;
+      btns += `<button class="pager-btn" onclick="usersPage=${totalPages-1};renderUsers()" ${usersPage===totalPages-1?"disabled":""}>»</button>`;
+      pager.innerHTML = btns;
+    }
+
+    function renderViolators(v){
+      violatorSel = new Set();
+      updateViolBulkBar();
+      $("tbViolators").innerHTML = v.map(u=>{
+        const nodePrimary = resolveNodeLabel(u.last_node_display, u.last_node);
+        const node = nodePrimary !== "unknown"
+          ? nodePrimary
+          : resolveNodeLabel(u.sharing?.last_node_display, u.sharing?.last_node);
+        const when = u.heuristics?.last_event_at || u.last_seen_at || u.sharing?.last_trigger_at || u.sharing?.violator_since || "";
+        const sh = u.sharing;
+        const hits = sh ? Number(sh.trigger_hits||0) : 0;
+        const req = sh ? Math.max(1, Number(sh.trigger_required||1)) : 1;
+        const pct = Math.min(100, Math.round(hits/req*100));
+        const full = hits >= req;
+        const trigBar = `<div class="trig-wrap"><span class="trig-text">${hits}/${req}</span><div class="trig-bar"><div class="trig-fill${full?' full':''}" style="width:${pct}%"></div></div></div>`;
+        return `<tr>
+          <td class="td-check"><input type="checkbox" class="viol-cb" data-id="${esc(u.user_identifier)}"></td>
+          <td>${renderUserCell(u.user_identifier, u.username)}</td>
+          <td><span class="badge b-red">${u.ip_count}</span></td>
+          <td>${u.limit}</td>
+          <td>${trigBar}</td>
+          <td>${esc(node)}</td>
+          <td>${when ? t(when) : "-"}</td>
+        </tr>`;
+      }).join("")
+        || `<tr><td colspan="7" class="muted" style="padding:14px">Нарушителей нет</td></tr>`;
+      bindUserOpenLinks($("tbViolators"));
+      $("tbViolators").querySelectorAll(".viol-cb").forEach(cb=>{
+        cb.onchange = () => {
+          if(cb.checked) violatorSel.add(cb.dataset.id);
+          else violatorSel.delete(cb.dataset.id);
+          updateViolBulkBar();
+          $("violCheckAll").checked = false;
+        };
+      });
+    }
+
+    function updateViolBulkBar(){
+      const bar = $("violBulkBar");
+      const cnt = $("violBulkCount");
+      if(violatorSel.size > 0){
+        bar.classList.add("show");
+        cnt.textContent = `${violatorSel.size} выбрано`;
+      } else {
+        bar.classList.remove("show");
+      }
+    }
+
+    function renderBan(){
+      banSel = new Set();
+      updateBanBulkBar();
+      const userRows = Array.isArray(sharingBanUsers) ? sharingBanUsers : [];
+      if (userRows.length > 0) {
+        $("tbBan").innerHTML = userRows.map(b=>{
+          const banCount = getBanCount(b.user_identifier);
+          return `<tr>
+            <td class="td-check"><input type="checkbox" class="ban-cb" data-id="${esc(b.user_identifier)}"></td>
+            <td>${renderUserCell(b.user_identifier, b.username)}</td>
+            <td>${esc((b.violation_ips||[]).slice(0,3).join(", ") || "-")}</td>
+            <td>${Number.isFinite(Number(b.limit)) ? b.limit : "-"}</td>
+            <td>${banCount !== "-" ? `<span class="badge b-red">${banCount}</span>` : "-"}</td>
+            <td>${t(b.banlist_since || b.violator_since)}</td>
+            <td>${Number.isFinite(Number(b.duration_seconds)) ? `${b.duration_seconds} сек` : "-"}</td>
+          </tr>`;
+        }).join("") || `<tr><td colspan="7" class="muted">Пусто</td></tr>`;
+        bindUserOpenLinks($("tbBan"));
+        $("tbBan").querySelectorAll(".ban-cb").forEach(cb=>{
+          cb.onchange = () => {
+            if(cb.checked) banSel.add(cb.dataset.id);
+            else banSel.delete(cb.dataset.id);
+            updateBanBulkBar();
+            $("banCheckAll").checked = false;
+          };
+        });
+        return;
+      }
+
+      const rows = Array.isArray(activeBans) ? activeBans : [];
+      $("tbBan").innerHTML = rows.map(b=>{
+        const userId = Array.isArray(b.users) && b.users.length ? b.users[0] : "";
+        const banCount = userId ? getBanCount(userId) : "-";
+        return `<tr>
+          <td class="td-check"><input type="checkbox" class="ban-cb" data-id="${esc(userId)}"></td>
+          <td>${(Array.isArray(b.users) && b.users.length ? b.users : ["-"]).map(uid=>`<div>${renderUserCell(uid)}</div>`).join("")}</td>
+          <td>${esc(b.ip || "-")}</td>
+          <td>-</td>
+          <td>${banCount !== "-" ? `<span class="badge b-red">${banCount}</span>` : "-"}</td>
+          <td>${t(b.set_at)}</td>
+          <td>${b.seconds_left>0 ? `${b.seconds_left} сек` : (b.duration || "-")}</td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="7" class="muted">Пусто</td></tr>`;
+      bindUserOpenLinks($("tbBan"));
+      $("tbBan").querySelectorAll(".ban-cb").forEach(cb=>{
+        cb.onchange = () => {
+          const id = cb.dataset.id;
+          if(!id) return;
+          if(cb.checked) banSel.add(id);
+          else banSel.delete(id);
+          updateBanBulkBar();
+          $("banCheckAll").checked = false;
+        };
+      });
+    }
+
+    function updateBanBulkBar(){
+      const bar = $("banBulkBar");
+      const cnt = $("banBulkCount");
+      if(banSel.size > 0){
+        bar.classList.add("show");
+        cnt.textContent = `${banSel.size} выбрано`;
+      } else {
+        bar.classList.remove("show");
+      }
+    }
+
+    function getBanCount(userId) {
+      const u = (users||[]).find(u => String(u.user_identifier||"") === String(userId||""));
+      const bc = Number(u?.sharing?.ban_count);
+      return Number.isFinite(bc) ? bc : "-";
+    }
+
+    function renderActiveBans(){
+      const rows = Array.isArray(activeBans) ? activeBans : [];
+      $("tbActiveBans").innerHTML = rows.map(b=>{
+        const userLinks = (Array.isArray(b.users) && b.users.length ? b.users : []).slice(0,3)
+          .map(uid=>`<div>${renderUserCell(uid)}</div>`).join("") || "-";
+        const expiresAt = b.expires_at || "";
+        const left = until(expiresAt);
+        const expired = b.seconds_left <= 0;
+        return `<tr>
+          <td><span class="badge b-blue">${esc(b.ip||"-")}</span></td>
+          <td>${userLinks}</td>
+          <td>${esc(b.node_name||"-")}</td>
+          <td>${t(b.set_at)}</td>
+          <td>${esc(b.duration||"-")}</td>
+          <td><span class="countdown${expired?' expired':''}">${left}</span></td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="6" class="muted" style="padding:14px">Активных банов нет</td></tr>`;
+      bindUserOpenLinks($("tbActiveBans"));
+    }
+
+    function renderPidarasy(){
+      const rows = Array.isArray(permanentSharers) ? permanentSharers : [];
+      $("tbPidarasy").innerHTML = rows.map(b=>`<tr>
+        <td>${renderUserCell(b.user_identifier, b.username)}</td>
+        <td>${esc((b.violation_ips||[]).slice(0,3).join(", ") || "-")}</td>
+        <td>${Number.isFinite(Number(b.limit)) ? b.limit : "-"}</td>
+        <td>${Number.isFinite(Number(b.trigger_hits)) && Number.isFinite(Number(b.trigger_required)) ? `${b.trigger_hits}/${b.trigger_required}` : "-"}</td>
+        <td>${esc((b.violation_nodes||[]).slice(0,3).map(displayNodeName).join(", ") || resolveNodeLabel(b.last_node_display, b.last_node) || "-")}</td>
+        <td>${t(b.permanent_ban_since || b.banlist_since || b.violator_since)}</td>
+      </tr>`).join("") || `<tr><td colspan="6" class="muted">Пусто</td></tr>`;
+      bindUserOpenLinks($("tbPidarasy"));
+    }
+
+    function renderNet(){
+      const rows = Array.isArray(networkTypes) ? networkTypes : [];
+      const badgeClass = (t)=>{
+        const tp = String(t||"unknown").toLowerCase();
+        if(tp==="mobile") return "b-amber";
+        if(tp==="wifi") return "b-cyan";
+        if(tp==="cable") return "b-blue";
+        return "";
+      };
+      $("tbNet").innerHTML = rows.map(r=>`<tr>
+        <td><span class="badge ${badgeClass(r.network_type)}">${esc(netTypeName(r.network_type))}</span></td>
+        <td><span class="badge b-blue">${r.users_count||0}</span></td>
+        <td>${r.ips_count||0}</td>
+        <td>${(r.providers||[]).slice(0,3).map(esc).join(", ") || "-"}</td>
+        <td>${(r.examples||[]).slice(0,6).map(esc).join(", ") || "-"}</td>
+      </tr>`).join("") || `<tr><td colspan="5" class="muted">Нет данных</td></tr>`;
+    }
+
+    function renderShared(){
+      const m=new Map();
+      for(const u of users){
+        for(const ip of (u.active_ips||[])){
+          if(!m.has(ip)) m.set(ip,[]);
+          m.get(ip).push(u.user_identifier);
+        }
+      }
+      const rows=[...m.entries()].filter(([,arr])=>arr.length>1).sort((a,b)=>b[1].length-a[1].length);
+      $("tbShared").innerHTML=rows.map(([ip,arr])=>`<tr><td>${ip}</td><td><span class="badge b-red">${arr.length}</span></td><td>${arr.map(esc).join(", ")}</td></tr>`).join("")
+        || `<tr><td colspan="3" class="muted">Общих IP нет</td></tr>`;
+    }
+
+    function logCategory(tp){
+      const t = String(tp || "").toLowerCase();
+      if (t === "block_published" || t === "manual_block" || t === "manual_unblock") return "block";
+      if (t === "limit_exceeded" || t === "limit_exceeded_ignored") return "violation";
+      if (t.includes("sharing") || t.includes("permanent") || t.includes("banlist")) return "pending";
+      return "info";
+    }
+
+    function renderLogs(){
+      const rows = Array.isArray(logs) ? logs : [];
+      const typeBadge = (tp) => {
+        const t = String(tp || "").toLowerCase();
+        if (t === "block_published" || t === "manual_block") return '<span class="badge b-red">BLOCK</span>';
+        if (t === "manual_unblock") return '<span class="badge b-cyan">UNBLOCK</span>';
+        if (t === "limit_exceeded") return '<span class="badge b-amber">VIOLATION</span>';
+        if (t === "limit_exceeded_ignored") return '<span class="badge">IGNORED</span>';
+        if (t === "sharing_pending" || t === "sharing_pending_banlist") return '<span class="badge b-blue">PENDING</span>';
+        if (t === "heuristics_rejected") return '<span class="badge b-blue">REJECTED</span>';
+        if (t === "network_policy_rejected") return '<span class="badge b-blue">NET_GUARD</span>';
+        if (t === "permanent_ban_applied") return '<span class="badge b-red">PERM_BAN</span>';
+        if (t === "permanent_ban_failed") return '<span class="badge b-amber">PERM_FAIL</span>';
+        if (t === "permanent_ban_skipped") return '<span class="badge">PERM_SKIP</span>';
+        if (t === "node_switch") return '<span class="badge b-cyan">NODE_SWITCH</span>';
+        if (t === "network_type_changed") return '<span class="badge b-amber">NET_TYPE</span>';
+        if (t === "node_parallel") return '<span class="badge b-cyan">PARALLEL</span>';
+        if (t === "new_ip") return '<span class="badge b-green">NEW_IP</span>';
+        if (t === "sharing_state_reset") return '<span class="badge b-cyan">RESET</span>';
+        return `<span class="badge">${esc(String(tp||"event").toUpperCase())}</span>`;
+      };
+
+      const filtered = rows.filter(r => logFilters.has(logCategory(r.type)));
+
+      const logRowCls = (tp) => {
+        const cat = logCategory(tp);
+        if(cat==="block") return "log-block";
+        if(cat==="violation") return "log-violation";
+        if(tp==="manual_unblock") return "log-unblock";
+        if(cat==="pending") return "log-pending";
+        return "";
+      };
+      $("tbLogs").innerHTML = filtered.map(r=>`<tr class="${logRowCls(r.type)}">
+        <td style="white-space:nowrap">${t(r.timestamp)}</td>
+        <td>${esc(r.user_identifier || "-")}</td>
+        <td>${typeBadge(r.type)}</td>
+        <td>${esc(r.source_ip || "-")}</td>
+        <td>${esc(displayNodeName(r.node_name || "-"))}</td>
+        <td>${esc(r.message || "-")}</td>
+      </tr>`).join("") || `<tr><td colspan="6" class="muted">Нет данных</td></tr>`;
+    }
+
+    function renderHwid(){
+      $("tbHwid").innerHTML=users.map(u=>`<tr><td>${esc(u.user_identifier)}</td><td><span class="badge ${u.exceeds?'b-red':'b-blue'}">${u.ip_count}</span></td><td>${u.limit}</td><td>${u.exceeds?'<span class="badge b-red">Превышен</span>':'<span class="badge b-green">Норма</span>'}</td></tr>`).join("")
+        || `<tr><td colspan="4" class="muted">Нет данных</td></tr>`;
+    }
+
+    function renderConfig(){
+      const el = $("cfgPanel");
+      if(!el) return;
+      const d = cfgData;
+      if(!d || Object.keys(d).length === 0){
+        el.innerHTML = '<p class="muted">Нет данных конфигурации</p>';
+        return;
+      }
+      const rows = [
+        ["Макс. IP на пользователя", d.max_ips_per_user],
+        ["Длительность блокировки", d.block_duration],
+        ["TTL IP пользователя (сек)", d.user_ip_ttl_seconds],
+        ["Задержка очистки IP (сек)", d.clear_ips_delay_seconds],
+        ["Обнаружение шаринга", d.sharing_detection_enabled ? "✓ включено" : "✗ выключено"],
+        ["Порог триггеров", d.trigger_count],
+        ["Период триггеров (сек)", d.trigger_period_seconds],
+        ["Мин. интервал триггеров (сек)", d.trigger_min_interval_seconds],
+        ["Sustain шаринга (сек)", d.sharing_sustain_seconds],
+        ["Порог для бан-листа (сек)", d.banlist_threshold_seconds],
+        ["Окно источников шаринга (сек)", d.sharing_source_window_seconds],
+        ["Группировка по /24", d.subnet_grouping ? "✓" : "✗"],
+        ["Блок только по бан-листу", d.sharing_block_on_banlist_only ? "✓" : "✗"],
+        ["Блок только нарушителей", d.sharing_block_on_violator_only ? "✓" : "✗"],
+        ["Hardware Guard", d.sharing_hardware_guard ? "✓" : "✗"],
+        ["Перманентный бан (шаринг)", d.sharing_permanent_ban_enabled ? "✓" : "✗"],
+        ["Длительность перм. бана", d.sharing_permanent_ban_duration || "-"],
+        ["Эскалация банов", d.ban_escalation_enabled ? "✓" : "✗"],
+        ["Ступени эскалации", Array.isArray(d.ban_escalation_durations) ? d.ban_escalation_durations.join(", ") : (d.ban_escalation_durations || "-")],
+        ["Гео-шаринг", d.geo_sharing_enabled ? "✓" : "✗"],
+        ["Мин. стран для гео-бана", d.geo_sharing_min_countries],
+        ["Политика сети", d.network_policy_enabled ? "✓" : "✗"],
+        ["Grace IP для mobile", d.network_mobile_grace_ips],
+        ["Принудительный блок при превышении", d.network_force_block_excess_ips ? "✓" : "✗"],
+        ["Heuristics", d.heuristics_enabled ? "✓" : "✗"],
+        ["Окно heuristics (сек)", d.heuristics_window_seconds],
+        ["Таймаут heartbeat ноды (сек)", d.node_heartbeat_timeout_seconds],
+        ["Prometheus метрики", d.prometheus_enabled ? "✓" : "✗"],
+      ];
+      el.innerHTML = `<div class="table-wrap"><table class="cfg-table"><tbody>${
+        rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v !== undefined && v !== null ? esc(String(v)) : "-"}</td></tr>`).join("")
+      }</tbody></table></div>`;
+    }
+
+    const CHART_COLORS = {
+      green: 'rgba(36,196,122,.85)', amber: 'rgba(255,190,59,.85)',
+      red: 'rgba(255,84,119,.85)', blue: 'rgba(79,113,255,.85)',
+      cyan: 'rgba(18,201,232,.85)', muted: 'rgba(143,164,201,.55)'
+    };
+    const CHART_GRID = 'rgba(36,53,82,.5)';
+    const CHART_TICK = '#8fa4c9';
+    const CHART_LEGEND = { color: '#b7caef', font: { size: 12, weight: '700' } };
+
+    function renderCharts(){
+      const normal = users.filter(u=>!u.exceeds&&!u.blocked).length;
+      const violatorsCount = users.filter(u=>u.exceeds&&!u.blocked).length;
+      const banlistCount = Array.isArray(sharingBanUsers) ? sharingBanUsers.length : 0;
+      const permCount = Array.isArray(permanentSharers) ? permanentSharers.length : 0;
+      const ctx1 = document.getElementById('chartStatus');
+      if(ctx1){
+        if(chartStatus) chartStatus.destroy();
+        chartStatus = new Chart(ctx1, {
+          type: 'doughnut',
+          data: {
+            labels: ['Норма','Нарушители','Бан-лист','Перманент'],
+            datasets:[{
+              data:[normal,violatorsCount,banlistCount,permCount],
+              backgroundColor:[CHART_COLORS.green,CHART_COLORS.amber,CHART_COLORS.red,CHART_COLORS.blue],
+              borderColor:['#24c47a','#ffbe3b','#ff5477','#4f71ff'],
+              borderWidth:1, hoverOffset:6
+            }]
+          },
+          options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{labels:CHART_LEGEND,position:'bottom'}}}
+        });
+      }
+
+      const netRows = Array.isArray(networkTypes)?networkTypes:[];
+      const netLabels = netRows.length ? netRows.map(r=>netTypeName(r.network_type)) : ['Нет данных'];
+      const netCounts = netRows.length ? netRows.map(r=>r.users_count||0) : [0];
+      const netBg = netRows.length ? netRows.map(r=>{
+        const tp=String(r.network_type||'').toLowerCase();
+        if(tp==='mobile') return CHART_COLORS.amber;
+        if(tp==='wifi') return CHART_COLORS.cyan;
+        if(tp==='cable') return CHART_COLORS.blue;
+        return CHART_COLORS.muted;
+      }) : [CHART_COLORS.muted];
+      const ctx2 = document.getElementById('chartNetwork');
+      if(ctx2){
+        if(chartNetwork) chartNetwork.destroy();
+        chartNetwork = new Chart(ctx2, {
+          type:'bar',
+          data:{labels:netLabels,datasets:[{label:'Пользователей',data:netCounts,backgroundColor:netBg,borderRadius:6,borderWidth:0}]},
+          options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:CHART_TICK},grid:{color:CHART_GRID}},y:{ticks:{color:CHART_TICK,precision:0},grid:{color:CHART_GRID},beginAtZero:true}}}
+        });
+      }
+
+      const onlineN = (nodeHealth||[]).filter(n=>n.online).length;
+      const offlineN = (nodeHealth||[]).length - onlineN;
+      const ctx3 = document.getElementById('chartNodes');
+      if(ctx3){
+        if(chartNodes) chartNodes.destroy();
+        chartNodes = new Chart(ctx3, {
+          type:'doughnut',
+          data:{labels:['Онлайн','Оффлайн'],datasets:[{data:[onlineN||0,offlineN||0],backgroundColor:[CHART_COLORS.green,CHART_COLORS.red],borderColor:['#24c47a','#ff5477'],borderWidth:1,hoverOffset:6}]},
+          options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{labels:CHART_LEGEND,position:'bottom'}}}
+        });
+      }
+    }
+
+    function tlTypeLabel(type){
+      const t=String(type||"").toLowerCase();
+      const L={
+        block_published:"Заблокирован",manual_block:"Бан вручную",manual_unblock:"Разбан вручную",
+        limit_exceeded:"Лимит превышен",limit_exceeded_ignored:"Превышение проигнорировано",
+        sharing_pending:"Накопление триггеров",sharing_pending_banlist:"Ожидание ban-list",
+        banlist_added:"Добавлен в ban-list",violator_started:"Статус нарушителя",violator_cleared:"Статус снят",
+        new_ip:"Новый IP",node_switch:"Смена ноды",node_parallel:"Параллельные ноды",
+        network_type_changed:"Тип сети изменился",
+        permanent_ban_applied:"Перманентный бан",permanent_ban_failed:"Ошибка пермбана",permanent_ban_skipped:"Пермбан пропущен",
+        clear_done:"IP очищены",clear_scheduled:"Очистка запланирована",clear_failed:"Ошибка очистки",clear_canceled:"Очистка отменена",
+        alert_sent:"Уведомление отправлено",alert_failed:"Ошибка уведомления",
+        alert_sent_permanent:"Уведомление (пермбан)",alert_failed_permanent:"Ошибка уведомления (пермбан)",
+        geo_sharing_detected:"Гео-шаринг",sharing_state_reset:"Сброс триггеров",
+        process_error:"Ошибка обработки",block_skipped:"Блокировка пропущена",block_failed:"Ошибка блокировки",
+      };
+      return L[t]||String(type||"событие").replace(/_/g," ");
+    }
+
+    function tlMsgHtml(type,msg,sourceIp){
+      const t=String(type||"").toLowerCase();
+      const ipHtml=sourceIp?` <span class="tl-ip">${esc(sourceIp)}</span>`:"";
+      if(t==="sharing_pending_banlist"||t==="sharing_pending"){
+        const srcM=(msg||"").match(/sources=(\d+)\/(\d+)/);
+        const trgM=(msg||"").match(/triggers=(\d+)\/(\d+)/);
+        if(srcM&&trgM){
+          const sc=parseInt(srcM[1]),sl=parseInt(srcM[2]);
+          const th=parseInt(trgM[1]),tr=parseInt(trgM[2]);
+          const dots=Array.from({length:tr},(_,i)=>`<span class="tl-trig ${i<th?'hit':'miss'}"></span>`).join("");
+          const srcC=sc>sl?"var(--red)":"var(--green)";
+          return `<span style="color:var(--muted)">IP</span> <b style="color:${srcC}">${sc}</b><span style="color:var(--muted)">/${sl}</span>&ensp;<span style="color:var(--muted)">Триггеры</span> <span class="tl-trigs">${dots}</span> <b style="color:var(--blue)">${th}/${tr}</b>${ipHtml}`;
+        }
+      }
+      return `${esc(msg||"-")}${ipHtml}`;
+    }
+
+    function tlDotClass(type){
+      const t = String(type||"").toLowerCase();
+      if(t==="block_published"||t==="manual_block") return "block";
+      if(t==="manual_unblock") return "unblock";
+      if(t==="limit_exceeded"||t==="limit_exceeded_ignored") return "violation";
+      if(t.includes("permanent")) return "perm";
+      if(t.includes("geo")) return "geo";
+      if(t==="sharing_pending"||t==="sharing_pending_banlist"||t==="banlist_added"||t==="violator_started") return "pending";
+      return "";
+    }
+
+    async function openUser(id, silent=false){
+      openCardId = id;
+      try{
+        let d;
+        if (appMode === '3xui') {
+            const cached = users.find(u => u.user_identifier === id);
+            if (!cached) throw new Error("Пользователь не найден в кэше");
+            // Fetch runtime data: active IPs, sharing status, history, limits
+            let rt = {};
+            try { rt = await api(`/api/users/${encodeURIComponent(id)}`); } catch(_){}
+            d = {
+                ...cached,
+                limit:           (cached.limit > 0 ? cached.limit : rt.limit) || 0,
+                history:         rt.history        || logs.filter(l => l.user_identifier === id),
+                hwid_devices:    rt.hwid_devices   || [],
+                active_ips:      rt.active_ips     || [],
+                sharing:         rt.sharing        || null,
+                total_events:    rt.total_events   ?? 0,
+                blocked_events:  rt.blocked_events ?? 0,
+                last_seen_at:    rt.last_seen_at   || cached.last_seen_at,
+                first_activity_at: rt.first_activity_at,
+            };
+        } else {
+            d = await api(`/api/users/${encodeURIComponent(id)}`);
+        }
+        
+        const name = (d.username && String(d.username).trim()) ? d.username : d.user_identifier;
+        const history = (d.history || []).slice(0, 10);
+        const firstActivity = d.first_activity_at || (history.length ? history[history.length - 1].timestamp : "");
+        const lastActivity = d.last_activity_at || d.last_seen_at || d.heuristics?.last_event_at || (history.length ? history[0].timestamp : "");
+        const totalEvents = Number.isFinite(Number(d.total_events)) ? Number(d.total_events) : history.length;
+        const blockedEvents = Number.isFinite(Number(d.blocked_events))
+          ? Number(d.blocked_events)
+          : countByTypes(history, ["block_published", "manual_block"]);
+        const sharing = d.sharing || null;
+        const triggerInfo = sharing ? `${sharing.trigger_hits}/${sharing.trigger_required}` : "-";
+        const banlistStatus = sharing?.in_banlist ? "Да" : "Нет";
+        const permanentBanStatus = sharing?.permanent_ban ? "Да" : "Нет";
+        const permanentBanSince = sharing?.permanent_ban_since || "";
+        const concurrentInfo = sharing ? `${sharing.concurrent_ips}/${sharing.concurrent_limit}` : "-";
+        const concurrentState = sharing ? (sharing.current_exceeds_in_window ? "Да" : "Нет") : "-";
+        const windowSeconds = Number.isFinite(Number(sharing?.trigger_period_seconds)) ? Number(sharing.trigger_period_seconds) : 30;
+        const banCount = Number.isFinite(Number(sharing?.ban_count)) ? Number(sharing.ban_count) : 0;
+        const geoCountries = Array.isArray(sharing?.geo_countries) ? sharing.geo_countries : [];
+        const geoMismatch = sharing?.geo_mismatch || false;
+        const nodeName = resolveNodeLabel(d.last_node_display, d.last_node);
+        const ipRows = Array.isArray(d.active_ips) ? d.active_ips : [];
+        const sourceSet = new Set(ipRows.map(ip => String(ip.subnet24 || ip.ip || "").trim()).filter(Boolean));
+        const sourceCount = sourceSet.size;
+        const networkCounters = { mobile: 0, wifi: 0, cable: 0, unknown: 0 };
+        for (const ip of ipRows) {
+          const tp = String(ip.network_type || "unknown").toLowerCase();
+          if (Object.prototype.hasOwnProperty.call(networkCounters, tp)) networkCounters[tp] += 1;
+          else networkCounters.unknown += 1;
+        }
+        const networkSummary = `Сотовый: ${networkCounters.mobile}, Wi-Fi: ${networkCounters.wifi}, Кабельный: ${networkCounters.cable}, Неизвестно: ${networkCounters.unknown}`;
+        const activeNodeList = [...new Set(
+          ipRows.map(ip => String(resolveNodeLabel(ip.node_display, ip.node_name)).trim()).filter(Boolean)
+        )];
+        if (activeNodeList.length === 0 && nodeName && nodeName !== "unknown") {
+          activeNodeList.push(nodeName);
+        }
+        const nodeBadges = activeNodeList.length
+          ? activeNodeList.map(n => `<span class="badge b-cyan">${esc(n)}</span>`).join("")
+          : '<span class="badge">unknown</span>';
+        const parallelLive = activeNodeList.length >= 2;
+        const lastParallelEvent = history.find(h => String(h.type || "").toLowerCase() === "node_parallel");
+        const parallelSince = lastParallelEvent?.timestamp || "";
+        const connectionBadge = d.online ? '<span class="badge b-green">Онлайн</span>' : '<span class="badge">Оффлайн</span>';
+        const blockedNow = !!d.blocked_now;
+        const statusBadge = blockedNow
+          ? '<span class="badge b-red">Заблокирован</span>'
+          : (d.exceeds ? '<span class="badge b-red">Нарушитель</span>' : '<span class="badge b-green">Норма</span>');
+        const warning = blockedNow
+          ? `<div class="warn-box"><b>Блокировка активна:</b> пользователь находится в активном бане.</div>`
+          : (d.exceeds
+          ? `<div class="warn-box"><b>Нарушение:</b> превышен лимит устройств (${d.ip_count}/${d.limit}) и выполнены условия триггеров.</div>`
+          : (d.ip_count > d.limit
+              ? `<div class="warn-box"><b>Пояснение:</b> IP пул (${d.ip_count}/${d.limit}) выше лимита, но триггеров пока недостаточно.</div>`
+              : ""));
+        const hwidDevices = Array.isArray(d.hwid_devices) ? d.hwid_devices : [];
+        const hwidCount = Number.isFinite(Number(d.hwid_devices_count)) ? Number(d.hwid_devices_count) : hwidDevices.length;
+        const baseAccount = String(d.base_account || d.user_identifier || "-");
+        const keySlot = String(d.key_slot || "").trim();
+        const clipUa = (ua) => {
+          const text = String(ua || "").trim();
+          if (!text) return "-";
+          return text.length > 110 ? `${text.slice(0, 110)}...` : text;
+        };
+
+        const timelineHtml = history.length ? `<div class="timeline">${history.map(h=>{
+          const dc = tlDotClass(h.type);
+          return `<div class="tl-item">
+            <div class="tl-dot${dc?' '+dc:''}"></div>
+            <div class="tl-time">${t(h.timestamp)}</div>
+            <div class="tl-type">${tlTypeLabel(h.type)}</div>
+            <div class="tl-msg">${tlMsgHtml(h.type,h.message||"",h.source_ip||"")}</div>
+          </div>`;
+        }).join("")}</div>` : `<p class="muted">История пуста</p>`;
+
+        const geoSection = geoCountries.length > 0 || geoMismatch
+          ? `<div class="facts-row"><span>Гео-мисматч</span><b>${geoMismatch ? '<span class="badge b-red">Да</span>' : '<span class="badge b-green">Нет</span>'}</b></div>
+             <div class="facts-row"><span>Страны подключения</span><b>${geoCountries.length ? geoCountries.map(esc).join(", ") : "-"}</b></div>`
+          : "";
+
+        $("mTitle").textContent = `Карточка пользователя`;
+        $("mBody").innerHTML = `
+          <div class="user-shell">
+            <section class="user-top">
+              <div>
+                <h2 class="user-title">${esc(name)}</h2>
+                <div class="user-id">ID: ${esc(d.user_identifier || "-")}</div>
+                <div class="user-tags">
+                  <span class="meta-chip"><span class="k">Активность</span>${connectionBadge}</span>
+                  <span class="meta-chip"><span class="k">Статус</span>${statusBadge}</span>
+                  <span class="meta-chip multi"><span class="k">Ноды</span>${nodeBadges}</span>
+                  <span class="meta-chip"><span class="k">Ban-list</span>${sharing?.in_banlist ? '<span class="badge b-red">Да</span>' : '<span class="badge">Нет</span>'}</span>
+                  <span class="meta-chip"><span class="k">Перманент</span>${sharing?.permanent_ban ? '<span class="badge b-red">Да</span>' : '<span class="badge">Нет</span>'}</span>
+                </div>
+              </div>
+              <div class="user-actions">
+                <div class="user-actions-row">
+                  <button class="btn" id="actReset">↺ Триггеры</button>
+                  <button class="btn" id="actUnblock">Разбанить</button>
+                  <button class="btn" id="actClear">Сбросить IP</button>
+                </div>
+                <div class="user-actions-row ban-row">
+                  <select id="actDuration" class="dur-select">
+                    <option value="5m">5 мин</option>
+                    <option value="30m" selected>30 мин</option>
+                    <option value="1h">1 час</option>
+                    <option value="6h">6 часов</option>
+                    <option value="24h">24 часа</option>
+                    <option value="permanent">Навсегда</option>
+                  </select>
+                  <button class="btn primary" id="actBlock">Заблокировать</button>
+                </div>
+              </div>
+            </section>
+            ${warning}
+            <section class="user-kpi">
+              <div class="kpi-item"><small>Уникальных IP</small><b>${d.ip_count}</b></div>
+              <div class="kpi-item"><small>Источников (/24)</small><b>${sourceCount}</b></div>
+              <div class="kpi-item"><small>Лимит устройств</small><b>${d.limit}</b></div>
+              <div class="kpi-item"><small>HWID устройств</small><b>${hwidCount}</b></div>
+              <div class="kpi-item"><small>Источники live</small><b>${esc(concurrentInfo)}</b></div>
+              <div class="kpi-item"><small>Триггеры</small><b>${esc(triggerInfo)}</b></div>
+              <div class="kpi-item"><small>Всего событий</small><b>${totalEvents}</b></div>
+              <div class="kpi-item"><small>Активность</small><b class="slim">${rel(lastActivity)}</b></div>
+            </section>
+            <section class="user-panels">
+              <div class="user-card">
+                <h3>Профиль</h3>
+                <div class="facts-row"><span>Telegram ID</span><b>${esc(d.telegram_id || "-")}</b></div>
+                <div class="facts-row"><span>Username</span><b>${esc(name)}</b></div>
+                <div class="facts-row"><span>Базовый аккаунт</span><b>${esc(baseAccount)}</b></div>
+                <div class="facts-row"><span>Слот ключа</span><b>${esc(keySlot || "-")}</b></div>
+                <div class="facts-row"><span>Описание</span><b>${esc(d.description || "—")}</b></div>
+                <div class="facts-row"><span>Первая активность</span><b>${t(firstActivity)}</b></div>
+                <div class="facts-row"><span>Последняя активность</span><b>${rel(lastActivity)}</b></div>
+              </div>
+              <div class="user-card">
+                <h3>Лимиты и блокировки</h3>
+                <div class="facts-row"><span>В ban-list</span><b>${esc(banlistStatus)}</b></div>
+                <div class="facts-row"><span>Перманентный бан</span><b>${esc(permanentBanStatus)}</b></div>
+                <div class="facts-row"><span>Навсегда с</span><b>${permanentBanSince ? t(permanentBanSince) : "-"}</b></div>
+                <div class="facts-row"><span>Попаданий в ban-list</span><b style="color:${banCount>0?'#ff9fb4':'inherit'}">${banCount}</b></div>
+                <div class="facts-row"><span>Заблокировано раз</span><b style="color:${blockedEvents>0?'#ff9fb4':'inherit'}">${blockedEvents}</b></div>
+                <div class="facts-row"><span>Превышение сейчас</span><b>${esc(concurrentState)}</b></div>
+                <div class="facts-row"><span>Период триггера</span><b>${windowSeconds} сек</b></div>
+                <div class="facts-row"><span>Параллельно сейчас</span><b>${parallelLive ? '<span class="badge b-cyan">Да</span>' : '<span class="badge">Нет</span>'}</b></div>
+                <div class="facts-row"><span>Нод одновременно</span><b>${activeNodeList.length}</b></div>
+                <div class="facts-row"><span>Последний parallel</span><b>${parallelSince ? rel(parallelSince) : "-"}</b></div>
+                ${geoSection}
+              </div>
+            </section>
+            <section class="user-card">
+              <h3>Текущие IP адреса (за TTL)</h3>
+              <div class="facts-row"><span>Сводка по сетям</span><b>${esc(networkSummary)}</b></div>
+              <div class="table-wrap"><table><thead><tr><th>IP</th><th>Нода</th><th>TTL</th><th>Подсеть</th><th>Сеть</th><th>Провайдер</th><th>Страна</th><th>Организация</th></tr></thead><tbody>${ipRows.map(ip=>`<tr><td>${esc(ip.ip)}</td><td>${esc(resolveNodeLabel(ip.node_display, ip.node_name))}</td><td>${ip.ttl_seconds}s</td><td>${esc(ip.subnet24)}</td><td>${esc(netTypeName(ip.network_type))}</td><td>${esc(ip.network_provider||"-")}</td><td>${esc(ip.network_country||"-")}</td><td>${esc(ip.network_org||"-")}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Нет активных IP</td></tr>`}</tbody></table></div>
+            </section>
+            ${appMode === '3xui' ? '' : `<section class="user-card">
+              <h3>HWID устройства (${hwidCount})</h3>
+              <div class="table-wrap"><table><thead><tr><th>HWID</th><th>Платформа</th><th>Модель</th><th>OS</th><th>User-Agent</th><th>Создано</th><th>Обновлено</th></tr></thead><tbody>${hwidDevices.map(dev=>`<tr><td>${esc(dev.hwid||"-")}</td><td>${esc(dev.platform||"-")}</td><td>${esc(dev.model||"-")}</td><td>${esc(dev.os||"-")}</td><td title="${esc(dev.user_agent||"")}">${esc(clipUa(dev.user_agent))}</td><td>${t(dev.created_at)}</td><td>${t(dev.updated_at)}</td></tr>`).join("") || `<tr><td colspan="7" class="muted">Нет данных по HWID</td></tr>`}</tbody></table></div>
+            </section>`}
+            <section class="user-card">
+              <h3>История событий (последние 10)</h3>
+              ${timelineHtml}
+            </section>
+          </div>`;
+        $("modal").classList.add("active");
+        $("actBlock").onclick = () => {
+          const dur = $("actDuration").value;
+          manualBlock(id, dur);
+        };
+        $("actReset").onclick = () => resetSharing(id);
+        $("actUnblock").onclick = () => manualUnblock(id);
+        $("actClear").onclick = () => manualClear(id);
+      }catch(e){
+        showNotice("Не удалось загрузить карточку: "+e.message, "err");
+      }
+    }
+
+    async function manualBlock(id, duration){
+      const reason = await askReason("Подтвердите блокировку", "Причина блокировки (опционально):");
+      if (reason === null) return;
+      try{
+        await api("/api/actions/block",{method:"POST",body:JSON.stringify({user_identifier:id,duration,reason:reason||""})});
+        showNotice(`Команда на блокировку (${duration}) отправлена`, "ok");
+        await load(true);
+        await openUser(id);
+      }catch(e){
+        showNotice("Ошибка блокировки: "+e.message, "err");
+      }
+    }
+
+    async function manualClear(id){
+      const reason = await askReason("Подтвердите очистку IP", "Причина очистки (опционально):");
+      if (reason === null) return;
+      try{
+        await api("/api/actions/clear",{method:"POST",body:JSON.stringify({user_identifier:id,reason:reason||""})});
+        showNotice("IP очищены", "ok");
+        await load(true);
+        await openUser(id);
+      }catch(e){
+        showNotice("Ошибка очистки: "+e.message, "err");
+      }
+    }
+
+    async function manualUnblock(id){
+      const reason = await askReason("Подтвердите разблокировку", "Причина разблокировки (опционально):");
+      if (reason === null) return;
+      try{
+        await api("/api/actions/unblock",{method:"POST",body:JSON.stringify({user_identifier:id,reason:reason||""})});
+        showNotice("Команда на разблокировку отправлена", "ok");
+        await load(true);
+        await openUser(id);
+      }catch(e){
+        showNotice("Ошибка разблокировки: "+e.message, "err");
+      }
+    }
+
+    async function resetSharing(id){
+      const reason = await askReason("Сбросить триггеры шаринга", "Причина сброса (опционально):", "manual_panel_reset");
+      if (reason === null) return;
+      try{
+        await api("/api/actions/reset_sharing",{method:"POST",body:JSON.stringify({user_identifier:id,reason:reason||"manual_panel_reset"})});
+        showNotice("Триггеры сброшены", "ok");
+        await load(true);
+        await openUser(id);
+      }catch(e){
+        showNotice("Ошибка сброса: "+e.message, "err");
+      }
+    }
+
+    async function bulkUnban(ids){
+      if(!ids || ids.size === 0) return;
+      const arr = [...ids];
+      const reason = await askReason(`Разбанить ${arr.length} пользователей`, "Причина:");
+      if (reason === null) return;
+      let ok = 0, fail = 0;
+      for(const id of arr){
+        try{
+          await api("/api/actions/unblock",{method:"POST",body:JSON.stringify({user_identifier:id,reason:reason||"bulk_unban"})});
+          ok++;
+        }catch{ fail++; }
+      }
+      showNotice(`Разбанено: ${ok}${fail>0?`, ошибок: ${fail}`:""}`, fail>0?"err":"ok");
+      await load(true);
+    }
+
+    async function bulkClear(ids){
+      if(!ids || ids.size === 0) return;
+      const arr = [...ids];
+      const reason = await askReason(`Сбросить IP у ${arr.length} пользователей`, "Причина:");
+      if (reason === null) return;
+      let ok = 0, fail = 0;
+      for(const id of arr){
+        try{
+          await api("/api/actions/clear",{method:"POST",body:JSON.stringify({user_identifier:id,reason:reason||"bulk_clear"})});
+          ok++;
+        }catch{ fail++; }
+      }
+      showNotice(`Очищено: ${ok}${fail>0?`, ошибок: ${fail}`:""}`, fail>0?"err":"ok");
+      await load(true);
+    }
+
+    function exportCSV(filename, rows, headers){
+      const escape = v => {
+        const s = String(v ?? "");
+        if(s.includes(",") || s.includes('"') || s.includes("\n")) return `"${s.replaceAll('"','""')}"`;
+        return s;
+      };
+      const lines = [headers.map(escape).join(","), ...rows.map(r=>r.map(escape).join(","))];
+      const blob = new Blob([lines.join("\r\n")], {type:"text/csv;charset=utf-8;"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function exportViolators(){
+      const viol = users.filter(u=>u.exceeds);
+      exportCSV("violators.csv", viol.map(u=>{
+        const node = resolveNodeLabel(u.last_node_display, u.last_node);
+        const sh = u.sharing;
+        return [
+          u.user_identifier,
+          displayName(u),
+          u.ip_count,
+          u.limit,
+          sh ? `${sh.trigger_hits}/${sh.trigger_required}` : "-",
+          node,
+          u.last_seen_at || ""
+        ];
+      }), ["ID", "Имя", "IP", "Лимит", "Триггеры", "Нода", "Последняя активность"]);
+    }
+
+    function exportBanList(){
+      const rows = Array.isArray(sharingBanUsers) && sharingBanUsers.length > 0 ? sharingBanUsers : activeBans;
+      exportCSV("banlist.csv", rows.map(b=>{
+        const userId = b.user_identifier || (Array.isArray(b.users) ? b.users[0] : "");
+        return [
+          userId,
+          b.username || displayName((users||[]).find(u=>u.user_identifier===userId)||{}),
+          (b.violation_ips||b.ip||""),
+          b.limit || "-",
+          getBanCount(userId),
+          b.banlist_since || b.set_at || "",
+          b.duration_seconds ? b.duration_seconds+"s" : (b.duration || "-")
+        ];
+      }), ["ID", "Имя", "IP", "Лимит", "Банов", "Добавлен", "Длительность"]);
+    }
+
+    async function changePassword(){
+      const cur=$("curPass").value;
+      const n1=$("newPass").value;
+      const n2=$("newPass2").value;
+      if(n1!==n2){ $("passMsg").textContent="Новый пароль и подтверждение не совпадают"; return; }
+      if(n1.length<8){ $("passMsg").textContent="Новый пароль должен быть не короче 8 символов"; return; }
+      try{
+        await api("/api/panel/password",{method:"POST",body:JSON.stringify({current_password:cur,new_password:n1})});
+        $("passMsg").textContent="Пароль успешно изменен";
+        $("curPass").value=""; $("newPass").value=""; $("newPass2").value="";
+      }catch{
+        $("passMsg").textContent="Не удалось изменить пароль";
+      }
+    }
+
+    function switchPage(pageId, title){
+      document.querySelectorAll(".menu").forEach(x=>x.classList.remove("active"));
+      const activeBtn = document.querySelector(`.menu[data-p="${pageId}"]`);
+      if(activeBtn) activeBtn.classList.add("active");
+      document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
+      const target = $("p-"+pageId);
+      if(target) target.classList.add("active");
+      const cp = $("currentPage");
+      if(cp) cp.textContent = title || (activeBtn ? activeBtn.dataset.title : "Панель");
+    }
+
+    // Event listeners
+    document.querySelectorAll(".menu").forEach(b=>{ b.onclick=()=>switchPage(b.dataset.p, b.dataset.title); });
+    $("refreshBtn").onclick=()=>load(false);
+    $("logoutBtn").onclick=logout;
+    $("loginBtn").onclick=login;
+    $("loginPass").onkeydown=e=>{ if(e.key==="Enter") login(); };
+    $("closeM").onclick=()=>{ $("modal").classList.remove("active"); openCardId=null; };
+    $("modal").onclick=e=>{ if(e.target===$("modal")){ $("modal").classList.remove("active"); openCardId=null; } };
+    $("qUser").oninput=()=>{ usersPage=0; renderUsers(); };
+    $("fState").onchange=()=>{ usersPage=0; renderUsers(); };
+    $("fNode").onchange=()=>{ usersPage=0; renderUsers(); };
+    $("changePassBtn").onclick=changePassword;
+    $("sidebarToggle").onclick=toggleSidebar;
+    $("globalSearch").onkeydown=e=>{ if(e.key==="Enter") globalSearch(); };
+    $("exportViolatorsBtn").onclick=exportViolators;
+    $("exportBanBtn").onclick=exportBanList;
+
+    // Violator bulk actions
+    $("violCheckAll").onchange=function(){
+      const cbs = document.querySelectorAll(".viol-cb");
+      violatorSel = new Set();
+      cbs.forEach(cb=>{ cb.checked=this.checked; if(this.checked) violatorSel.add(cb.dataset.id); });
+      updateViolBulkBar();
+    };
+    $("violBulkUnban").onclick=()=>bulkUnban(violatorSel);
+    $("violBulkClear").onclick=()=>bulkClear(violatorSel);
+    $("violBulkDeselect").onclick=()=>{
+      violatorSel=new Set();
+      document.querySelectorAll(".viol-cb").forEach(cb=>cb.checked=false);
+      $("violCheckAll").checked=false;
+      updateViolBulkBar();
+    };
+
+    // Ban bulk actions
+    $("banCheckAll").onchange=function(){
+      const cbs = document.querySelectorAll(".ban-cb");
+      banSel = new Set();
+      cbs.forEach(cb=>{ cb.checked=this.checked; if(this.checked&&cb.dataset.id) banSel.add(cb.dataset.id); });
+      updateBanBulkBar();
+    };
+    $("banBulkUnban").onclick=()=>bulkUnban(banSel);
+    $("banBulkDeselect").onclick=()=>{
+      banSel=new Set();
+      document.querySelectorAll(".ban-cb").forEach(cb=>cb.checked=false);
+      $("banCheckAll").checked=false;
+      updateBanBulkBar();
+    };
+
+    // Log filter
+    document.querySelectorAll(".lf-cb").forEach(cb=>{
+      cb.onchange=()=>{
+        if(cb.checked) logFilters.add(cb.dataset.cat);
+        else logFilters.delete(cb.dataset.cat);
+        renderLogs();
+      };
+    });
+
+    document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") load(true); });
+    checkAuth();
+  </script>
+</body>
+</html>

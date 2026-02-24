@@ -1,0 +1,58 @@
+services:
+  ffxban-blocker:
+    container_name: ffxban-blocker
+    hostname: ffxban-blocker
+    # Образ собирается локально перед запуском:
+    #   cd /opt/ffxban-blocker
+    #   tar -xzf ffxban-blocker-main.tar.gz
+    #   docker build -t ffxban-remnawave-blocker:latest ./ffxban_blocker
+    #   cd ffxban_blocker_conf && docker compose up -d
+    image: ffxban-remnawave-blocker:latest
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    user: root
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.25'
+        reservations:
+          memory: 32M
+          cpus: '0.10'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "8m"
+        max-file: "5"
+
+
+  vector:
+    image: timberio/vector:0.48.0-alpine
+    container_name: ffxban-vector
+    hostname: ffxban-vector
+    restart: unless-stopped
+    network_mode: host
+    command: ["--config", "/etc/vector/vector.toml"]
+    environment:
+      - NODE_NAME=${NODE_NAME}
+    volumes:
+      - ./vector/vector.toml:/etc/vector/vector.toml:ro
+      - /var/log/remnanode:/var/log/remnanode:ro
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
+          cpus: '0.10'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "8m"
+        max-file: "3"

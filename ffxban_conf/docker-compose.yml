@@ -1,0 +1,139 @@
+services:
+  ffxban:
+    container_name: ffxban
+    image: ffxban-remnawave:latest
+    restart: unless-stopped
+    expose:
+      - "9000"
+    env_file:
+      - .env
+    volumes:
+      - ./ffxban-custom:/app/ffxban
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      vector-aggregator:
+        condition: service_started
+    networks:
+      - ffxban-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rabbitmq:
+    image: rabbitmq:4.1.2-management-alpine
+    container_name: ffxban-rabbitmq
+    restart: unless-stopped
+    # Порт 5672 открыт для подключения Blocker-нод с удалённых серверов.
+    # ВАЖНО: ограничьте доступ фаерволом, разрешив только IP ваших нод.
+    # Пример ufw: ufw allow from <NODE_IP> to any port 5672
+    ports:
+      - "5672:5672"
+      # Management UI: доступен только с localhost (SSH-туннель).
+      # НЕ открывайте 15672 в публичный интернет!
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBIT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBIT_PASSWD}
+    networks:
+      - ffxban-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  vector-aggregator:
+    image: timberio/vector:0.48.0-alpine
+    container_name: ffxban-vector-aggregator
+    restart: unless-stopped
+    volumes:
+      - ./vector.toml:/etc/vector/vector.toml:ro
+    expose:
+      - "8686"
+    command: ["--config", "/etc/vector/vector.toml"]
+    networks:
+      - ffxban-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "8m"
+        max-file: "3"
+
+  nginx:
+    image: nginx:mainline-alpine
+    container_name: ffxban-nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "38213:443"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - vector-aggregator
+      - ffxban
+    networks:
+      - ffxban-net
+    logging:
+      driver: json-file
+      options:
+        max-size: "8m"
+        max-file: "3"
+
+  redis:
+    image: redis:8.2-m01-alpine3.22
+    container_name: ffxban-redis
+    restart: unless-stopped
+    # Redis доступен только внутри Docker-сети, наружу не экспортируется
+    expose:
+      - "6379"
+    # AOF-персистентность: не теряем IP-данные при перезапуске контейнера.
+    # RDB-снапшоты отключены (--save "") — AOF достаточно, RDB только занимал диск.
+    # auto-aof-rewrite сжимает AOF-файл когда он удваивается (min 32mb).
+    # maxmemory 256mb — ограничение ОЗУ; noeviction = ошибка вместо тихой потери данных.
+    command: >
+      redis-server
+      --save ""
+      --appendonly yes
+      --appendfsync everysec
+      --no-appendfsync-on-rewrite yes
+      --auto-aof-rewrite-percentage 100
+      --auto-aof-rewrite-min-size 32mb
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+    volumes:
+      - redis-data:/data
+    networks:
+      - ffxban-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "8m"
+        max-file: "3"
+
+networks:
+  ffxban-net:
+    driver: bridge
+
+volumes:
+  redis-data:
+  rabbitmq-data:

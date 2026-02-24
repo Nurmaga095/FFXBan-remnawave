@@ -1,0 +1,8 @@
+FROM alpine:3.22
+RUN addgroup -S ffxban && adduser -S -G ffxban ffxban
+WORKDIR /app
+COPY ffxban_v2 /app/ffxban
+COPY internal/scripts/add_and_check_ip.lua ./internal/scripts/add_and_check_ip.lua
+RUN chmod +x /app/ffxban && chown -R ffxban:ffxban /app
+USER ffxban
+CMD ["/app/ffxban"]
