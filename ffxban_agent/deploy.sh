@@ -20,6 +20,11 @@ warn()   { echo -e "${YELLOW}[!]${NC} $*"; }
 fail()   { echo -e "${RED}[✗]${NC} $*"; exit 1; }
 ask()    { echo -e "${BLUE}[?]${NC} $*"; }
 header() { echo -e "\n${BLUE}━━━ $* ━━━${NC}"; }
+cleanup_ssh_master() {
+    if [ "${SSH_MASTER_STARTED:-0}" = "1" ]; then
+        ssh "${SSH_OPTS[@]}" -O exit "${NODE_USER}@${NODE_IP}" >/dev/null 2>&1 || true
+    fi
+}
 sanitize_domain() {
     local v="$1"
     v="${v#http://}"
@@ -85,6 +90,13 @@ else
     warn "SSH-ключ не задан — возможен интерактивный ввод пароля"
 fi
 
+# Один SSH-сокет на всю сессию деплоя: обычно достаточно одного ввода пароля.
+mkdir -p "${HOME}/.ssh"
+CONTROL_PATH="${HOME}/.ssh/ffxban-ctl-%r@%h:%p"
+SSH_OPTS+=(-o ControlMaster=auto -o ControlPersist=10m -o ControlPath="${CONTROL_PATH}")
+SSH_MASTER_STARTED=0
+trap cleanup_ssh_master EXIT
+
 if [ -z "${RABBITMQ_URL:-}" ]; then
     ask "RABBITMQ_URL (amqp://user:pass@OBSERVER_IP:5672/):"
     read -r RABBITMQ_URL
@@ -147,8 +159,13 @@ fi
 # =============================================================================
 header "Проверка подключения к ноде"
 
-ssh "${SSH_OPTS[@]}" "${NODE_USER}@${NODE_IP}" "echo ok" &>/dev/null \
+# Явно поднимаем master-сессию в фоне (если вход по паролю — запросит пароль один раз).
+ssh "${SSH_OPTS[@]}" -Nf "${NODE_USER}@${NODE_IP}" >/dev/null 2>&1 \
     || fail "Не удаётся подключиться по SSH к ${NODE_USER}@${NODE_IP}"
+SSH_MASTER_STARTED=1
+
+ssh "${SSH_OPTS[@]}" "${NODE_USER}@${NODE_IP}" "echo ok" &>/dev/null \
+    || fail "SSH-соединение установлено, но тестовая команда не выполнилась"
 ok "SSH-доступ: есть"
 
 # =============================================================================
