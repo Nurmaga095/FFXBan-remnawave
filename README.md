@@ -1,10 +1,6 @@
 # FFXBan
 
 <p align="center">
-  <img src="docs/images/ffxban-panel-v1.0.png" alt="FFXBan Panel" width="920">
-</p>
-
-<p align="center">
   <b>Self-hosted anti-sharing платформа для VPN-инфраструктуры</b><br>
   Анализирует подключения, выявляет подозрительное одновременное использование аккаунтов и управляет блокировками через RabbitMQ + nftables.
 </p>
