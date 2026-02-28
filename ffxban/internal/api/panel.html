@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FFXBan Panel</title>
-    <link rel="stylesheet" href="/panel.css?v=20260228c">
+    <link rel="stylesheet" href="/panel.css?v=20260228g">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/ansi_up@6.0.2/ansi_up.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
@@ -92,6 +92,9 @@
             </div>
           </div>
           <div id="nodesCards" class="nodes-cards"></div>
+          <div id="nodesToggleWrap" class="nodes-toggle-wrap" style="display:none">
+            <button class="btn nodes-toggle-btn" id="nodesToggleBtn" type="button">Показать все</button>
+          </div>
         </div>
         <!-- Горячие пользователи + Системный статус -->
         <div class="db-row-bottom">
@@ -349,7 +352,7 @@
       <section id="p-net" class="page"><div class="section-head"><div><h2>Статистика по сетям</h2><p>Классификация: mobile / wifi / cable</p></div></div><div class="table-wrap"><table><thead><tr><th>Тип сети</th><th>Пользователей</th><th>IP</th><th>Провайдеры</th><th>Примеры IP</th></tr></thead><tbody id="tbNet"></tbody></table></div></section>
 
       <!-- SHARED IPS -->
-      <section id="p-shared" class="page"><div class="section-head"><div><h2>Общие IP</h2><p>IP, которые используют несколько пользователей</p></div></div><div class="table-wrap"><table><thead><tr><th>IP</th><th>Пользователей</th><th>Email</th></tr></thead><tbody id="tbShared"></tbody></table></div></section>
+      <section id="p-shared" class="page"><div class="section-head"><div><h2>Общие IP</h2><p>IP, которые используют несколько пользователей</p></div></div><div class="table-wrap"><table><thead><tr><th>IP</th><th>Подключений</th><th>Пользователи</th></tr></thead><tbody id="tbShared"></tbody></table></div></section>
 
       <!-- LOGS -->
       <section id="p-logs" class="page">
@@ -468,11 +471,15 @@
     let nodeSshLiveHeader = "";
     let nodeSshLiveNodes = {};
     let nodeSshCreds = {};   // nodeKey -> {user, has_password, has_private_key}
+    let _sshLiveRafId = 0;   // rAF handle for debounced SSH live render
+    let _nodeFilterKey = "";  // cache key for renderNodeFilters
     let credModalNodeKey = "";
     let ansiUp = null;
     const NODE_TREND_WINDOW_MS = 60 * 60 * 1000;
     const NODE_TREND_MAX_POINTS = 360;
     const nodeTrendHistory = new Map();
+    const DASHBOARD_NODES_LIMIT = 4;
+    let dashboardNodesExpanded = false;
     const TABLE_SKELETON_LAYOUT = {
       tbHotUsers: 7,
       tbUsers: 11,
@@ -487,34 +494,202 @@
       tbHwid: 4
     };
     const CONFIG_EDIT_SCHEMA = [
-      {key:"max_ips_per_user", label:"Макс. IP на пользователя", type:"int", min:1, max:100},
-      {key:"block_duration", label:"Длительность блокировки", type:"duration"},
-      {key:"user_ip_ttl_seconds", label:"TTL IP пользователя (сек)", type:"int", min:1},
-      {key:"clear_ips_delay_seconds", label:"Задержка очистки IP (сек)", type:"int", min:1},
-      {key:"sharing_detection_enabled", label:"Обнаружение шаринга", type:"bool"},
-      {key:"trigger_count", label:"Порог триггеров", type:"int", min:1, max:100},
-      {key:"trigger_period_seconds", label:"Период триггеров (сек)", type:"int", min:1},
-      {key:"trigger_min_interval_seconds", label:"Мин. интервал триггеров (сек)", type:"int", min:1},
-      {key:"sharing_sustain_seconds", label:"Sustain шаринга (сек)", type:"int", min:1},
-      {key:"banlist_threshold_seconds", label:"Порог для бан-листа (сек)", type:"int", min:1},
-      {key:"sharing_source_window_seconds", label:"Окно источников шаринга (сек)", type:"int", min:1},
-      {key:"subnet_grouping", label:"Группировка по /24", type:"bool"},
-      {key:"sharing_block_on_banlist_only", label:"Блок только по бан-листу", type:"bool"},
-      {key:"sharing_block_on_violator_only", label:"Блок только нарушителей", type:"bool"},
-      {key:"sharing_hardware_guard", label:"Hardware Guard", type:"bool"},
-      {key:"sharing_permanent_ban_enabled", label:"Перманентный бан (шаринг)", type:"bool"},
-      {key:"sharing_permanent_ban_duration", label:"Длительность перм. бана", type:"duration"},
-      {key:"ban_escalation_enabled", label:"Эскалация банов", type:"bool"},
-      {key:"ban_escalation_durations", label:"Ступени эскалации", type:"list"},
-      {key:"geo_sharing_enabled", label:"Гео-шаринг", type:"bool"},
-      {key:"geo_sharing_min_countries", label:"Мин. стран для гео-бана", type:"int", min:1},
-      {key:"network_policy_enabled", label:"Политика сети", type:"bool"},
-      {key:"network_mobile_grace_ips", label:"Grace IP для mobile", type:"int", min:0},
-      {key:"network_force_block_excess_ips", label:"Принудительный блок при превышении (IP)", type:"int", min:0},
-      {key:"heuristics_enabled", label:"Heuristics", type:"bool"},
-      {key:"heuristics_window_seconds", label:"Окно heuristics (сек)", type:"int", min:1},
-      {key:"node_heartbeat_timeout_seconds", label:"Таймаут heartbeat ноды (сек)", type:"int", min:1},
-      {key:"prometheus_enabled", label:"Prometheus метрики", type:"bool"}
+      {
+        key:"max_ips_per_user", label:"Макс. IP на пользователя", type:"int", min:1, max:100,
+        help:"Ограничивает, сколько IP один пользователь может держать одновременно.",
+        note:"Увеличивайте, если у пользователей часто несколько устройств и нестабильная сеть.",
+        example:"При значении 12 пользователь с 8 IP работает нормально; 13-й IP начинает копить триггеры.",
+        placeholder:"12"
+      },
+      {
+        key:"block_duration", label:"Длительность блокировки", type:"duration",
+        help:"Время базовой блокировки IP после срабатывания защиты.",
+        note:"Короткий срок быстрее прощает, длинный срок жестче режет злоупотребления.",
+        example:"5m: IP блокируется на 5 минут и снимается автоматически.",
+        placeholder:"5m"
+      },
+      {
+        key:"user_ip_ttl_seconds", label:"TTL IP пользователя (сек)", type:"int", min:1,
+        help:"Сколько секунд IP хранится в runtime без новой активности.",
+        note:"Если значение слишком маленькое, можно потерять контекст; слишком большое - устаревшие IP остаются дольше.",
+        example:"1200: неактивный IP удалится через 20 минут.",
+        placeholder:"1200"
+      },
+      {
+        key:"clear_ips_delay_seconds", label:"Задержка очистки IP (сек)", type:"int", min:1,
+        help:"Пауза перед очисткой IP после блокировки/события.",
+        note:"Помогает избежать гонок, когда лог и блокировка приходят почти одновременно.",
+        example:"900: очистка состояния начнется через 15 минут.",
+        placeholder:"900"
+      },
+      {
+        key:"sharing_detection_enabled", label:"Обнаружение шаринга", type:"bool",
+        help:"Главный переключатель всей анти-шаринг логики.",
+        note:"Если выключить, триггеры и блокировки по шарингу перестанут применяться.",
+        example:"Включено: система продолжает искать одновременное использование аккаунта.",
+        placeholder:""
+      },
+      {
+        key:"trigger_count", label:"Порог триггеров", type:"int", min:1, max:100,
+        help:"Сколько подтвержденных срабатываний нужно до статуса нарушителя.",
+        note:"Меньше число - быстрее наказание, больше число - мягче политика.",
+        example:"3: после трех срабатываний в окне пользователь считается нарушителем.",
+        placeholder:"3"
+      },
+      {
+        key:"trigger_period_seconds", label:"Период триггеров (сек)", type:"int", min:1,
+        help:"Временное окно, в котором считаются триггеры.",
+        note:"Увеличение окна делает политику строже, потому что события дольше учитываются.",
+        example:"3600: триггеры суммируются за последний час.",
+        placeholder:"3600"
+      },
+      {
+        key:"trigger_min_interval_seconds", label:"Мин. интервал триггеров (сек)", type:"int", min:1,
+        help:"Минимальная пауза между соседними триггерами.",
+        note:"Защищает от дублей, когда один и тот же всплеск логов приходит пачкой.",
+        example:"150: второй триггер раньше чем через 150 секунд не будет засчитан.",
+        placeholder:"150"
+      },
+      {
+        key:"sharing_sustain_seconds", label:"Sustain шаринга (сек)", type:"int", min:1,
+        help:"Сколько секунд превышение должно держаться непрерывно.",
+        note:"Фильтрует короткие скачки и ложные всплески.",
+        example:"50: если превышение держится меньше 50 секунд, оно не считается устойчивым.",
+        placeholder:"50"
+      },
+      {
+        key:"banlist_threshold_seconds", label:"Порог для бан-листа (сек)", type:"int", min:1,
+        help:"Через сколько секунд устойчивого нарушения пользователь попадает в бан-лист.",
+        note:"Обычно ставят существенно больше, чем sustain, чтобы отделить случайные нарушения от системных.",
+        example:"1800: в бан-лист попадают только при устойчивом нарушении около 30 минут.",
+        placeholder:"1800"
+      },
+      {
+        key:"sharing_source_window_seconds", label:"Окно источников шаринга (сек)", type:"int", min:1,
+        help:"За какой период анализируются источники IP при проверке шаринга.",
+        note:"Слишком маленькое окно пропускает часть источников, слишком большое добавляет шум.",
+        example:"180: система сравнивает источники за последние 3 минуты.",
+        placeholder:"180"
+      },
+      {
+        key:"subnet_grouping", label:"Группировка по /24", type:"bool",
+        help:"Считает IP из одной /24 подсети ближе друг к другу.",
+        note:"Полезно для провайдеров с частой ротацией адресов внутри одной подсети.",
+        example:"Включено: 10.10.10.5 и 10.10.10.200 учитываются мягче, чем IP из разных подсетей.",
+        placeholder:""
+      },
+      {
+        key:"sharing_block_on_banlist_only", label:"Блок только по бан-листу", type:"bool",
+        help:"Разрешает блокировку только после попадания в бан-лист.",
+        note:"Снижает риск агрессивных банов на ранней стадии.",
+        example:"Включено: до бан-листа можно видеть нарушения, но не блокировать.",
+        placeholder:""
+      },
+      {
+        key:"sharing_block_on_violator_only", label:"Блок только нарушителей", type:"bool",
+        help:"Применяет блокировку только пользователям со статусом нарушителя.",
+        note:"Используется, если нужна мягкая реакция для промежуточных состояний.",
+        example:"Включено: обычные пользователи не блокируются, даже если были единичные всплески.",
+        placeholder:""
+      },
+      {
+        key:"sharing_hardware_guard", label:"Hardware Guard", type:"bool",
+        help:"Учитывает HWID/устройства для снижения ложных блокировок.",
+        note:"Особенно полезно, если один пользователь часто меняет IP, но сидит с одного устройства.",
+        example:"Включено: одинаковый HWID уменьшает шанс ложного бана.",
+        placeholder:""
+      },
+      {
+        key:"sharing_permanent_ban_enabled", label:"Перманентный бан (шаринг)", type:"bool",
+        help:"Разрешает применять постоянный бан к подтвержденным злоупотреблениям.",
+        note:"Включайте только если уверены в качестве сигналов и работе апелляций.",
+        example:"Выключено: даже тяжелые нарушения получают только временные блокировки.",
+        placeholder:""
+      },
+      {
+        key:"sharing_permanent_ban_duration", label:"Длительность перм. бана", type:"duration",
+        help:"Фактическая длительность постоянного бана.",
+        note:"Обычно используется значение permanent; можно задать длинный срок вместо вечного.",
+        example:"permanent: бан без срока; 30d: длинный, но обратимый бан.",
+        placeholder:"permanent"
+      },
+      {
+        key:"ban_escalation_enabled", label:"Эскалация банов", type:"bool",
+        help:"Каждый следующий бан делает длиннее по лестнице длительностей.",
+        note:"Помогает мягко наказывать первый инцидент и жестко повторные.",
+        example:"Включено: 1-й бан 1h, 2-й 6h, 3-й 24h.",
+        placeholder:""
+      },
+      {
+        key:"ban_escalation_durations", label:"Ступени эскалации", type:"list",
+        help:"Список длительностей для последовательных банов через запятую.",
+        note:"Порядок важен: первая длительность для первого бана, вторая для второго и так далее.",
+        example:"1h, 6h, 24h, permanent: после исчерпания списка обычно берется последний шаг.",
+        placeholder:"1h, 6h, 24h, permanent"
+      },
+      {
+        key:"geo_sharing_enabled", label:"Гео-шаринг", type:"bool",
+        help:"Проверяет одновременную активность из разных стран.",
+        note:"Требует корректного определения гео по IP, иначе будут false-positive.",
+        example:"Включено: параллельные сессии из Германии и Бразилии могут дать триггер.",
+        placeholder:""
+      },
+      {
+        key:"geo_sharing_min_countries", label:"Мин. стран для гео-бана", type:"int", min:1,
+        help:"Сколько разных стран одновременно нужно для гео-срабатывания.",
+        note:"Минимум 2 обычно достаточно; выше - мягче и безопаснее.",
+        example:"2: как только одновременно видно 2 страны, условие гео-шаринга выполнено.",
+        placeholder:"2"
+      },
+      {
+        key:"network_policy_enabled", label:"Политика сети", type:"bool",
+        help:"Учитывает тип сети (mobile/wifi/cable/unknown) в анти-шаринг решениях.",
+        note:"Позволяет сделать более мягкие правила для мобильных сетей.",
+        example:"Включено: для mobile можно разрешить больше IP, чем для cable.",
+        placeholder:""
+      },
+      {
+        key:"network_mobile_grace_ips", label:"Grace IP для mobile", type:"int", min:0,
+        help:"Сколько дополнительных IP разрешается пользователю в мобильной сети.",
+        note:"Полезно при частой смене NAT/CGNAT у мобильных операторов.",
+        example:"1: при базовом лимите 2, для mobile фактически допускается до 3 IP.",
+        placeholder:"1"
+      },
+      {
+        key:"network_force_block_excess_ips", label:"Принудительный блок при превышении (IP)", type:"int", min:0,
+        help:"Если превышение достигло этого значения, включается жесткий блок.",
+        note:"0 обычно означает отключение принудительного порога.",
+        example:"3: если пользователь превысил лимит сразу на 3 IP, блок включается без смягчений.",
+        placeholder:"3"
+      },
+      {
+        key:"heuristics_enabled", label:"Heuristics", type:"bool",
+        help:"Включает дополнительные эвристики против ложных срабатываний.",
+        note:"Рекомендуется держать включенным в бою.",
+        example:"Включено: система проверяет паттерны поведения перед баном.",
+        placeholder:""
+      },
+      {
+        key:"heuristics_window_seconds", label:"Окно heuristics (сек)", type:"int", min:1,
+        help:"Временное окно для подсчета эвристических сигналов.",
+        note:"Слишком маленькое окно шумит, слишком большое делает реакцию медленной.",
+        example:"120: эвристика оценивает последние 2 минуты активности.",
+        placeholder:"120"
+      },
+      {
+        key:"node_heartbeat_timeout_seconds", label:"Таймаут heartbeat ноды (сек)", type:"int", min:1,
+        help:"Через сколько секунд без heartbeat нода считается offline.",
+        note:"Ставьте чуть выше реального интервала heartbeat, чтобы не ловить ложный offline.",
+        example:"120: если 2 минуты нет heartbeat, нода станет offline в панели.",
+        placeholder:"120"
+      },
+      {
+        key:"prometheus_enabled", label:"Prometheus метрики", type:"bool",
+        help:"Включает отдачу метрик на эндпоинте /metrics.",
+        note:"Включайте только если метрики действительно собираются внешним мониторингом.",
+        example:"Включено: Prometheus может скрейпить метрики и строить алерты.",
+        placeholder:""
+      }
     ];
 
     const $ = id => document.getElementById(id);
@@ -747,10 +922,10 @@
       el.classList.remove("skel","skel-num");
       const newVal = String(value);
       if (prevStatVals[id] !== undefined && prevStatVals[id] !== newVal) {
-        el.classList.remove('stat-anim');
-        void el.offsetWidth;
-        el.classList.add('stat-anim');
-        setTimeout(()=>el.classList.remove('stat-anim'), 400);
+        el.animate(
+          [{transform:'scale(1.18)',color:'#6daaff'},{transform:'scale(1)',color:''}],
+          {duration:350, easing:'ease-out'}
+        );
       }
       el.textContent = newVal;
       prevStatVals[id] = newVal;
@@ -1272,25 +1447,13 @@
       renderNodeFilters();
       renderTopNodes();
       renderHotUsers();
-      renderUsers();
-      renderTraffic();
-      renderViolators(meta.viol);
-      renderBan();
-      renderActiveBans();
-      renderPermBan();
-      renderNet();
-      renderShared();
-      renderLogs();
-      renderHwid();
       renderCharts();
-      renderConfig();
       renderSysinfo();
-      if(activePageId() === "p-nodeops"){
-        renderNodeSshNodes();
-      }
-      if(activePageId() === "p-sshterm"){
-        const active = Object.values(sstSessions).find(s=>s.paneEl.classList.contains("active"));
-        if(active?.fitAddon){ try{ active.fitAddon.fit(); }catch(_){} }
+
+      // Render only the currently visible page to avoid heavy off-screen work
+      const pg = activePageId();
+      if(pg && pg !== "p-dashboard"){
+        renderPageContents(pg.replace("p-", ""));
       }
     }
 
@@ -1405,24 +1568,51 @@
       });
     }
 
+    function nodeRowsForDashboard(rows){
+      const list = Array.isArray(rows) ? rows : [];
+      if(dashboardNodesExpanded || list.length <= DASHBOARD_NODES_LIMIT) return list;
+      return list.slice(0, DASHBOARD_NODES_LIMIT);
+    }
+
+    function updateDashboardNodesToggle(total){
+      const btn = $("nodesToggleBtn");
+      const wrap = $("nodesToggleWrap");
+      if(!btn) return;
+      if(total <= DASHBOARD_NODES_LIMIT){
+        if(wrap) wrap.style.display = "none";
+        return;
+      }
+      if(wrap) wrap.style.display = "block";
+      btn.textContent = dashboardNodesExpanded ? `Показать ${DASHBOARD_NODES_LIMIT}` : `Показать все (${total})`;
+    }
+
+    function toggleDashboardNodes(){
+      dashboardNodesExpanded = !dashboardNodesExpanded;
+      renderTopNodes();
+    }
+
     function renderTopNodes(){
       const rows = Array.isArray(nodeHealth) ? nodeHealth : [];
+      const showRows = nodeRowsForDashboard(rows);
       const online = rows.filter(r=>!!r.online).length;
       const total = rows.length;
       const offline = Math.max(0, total - online);
       $("nodesSummaryHint").textContent = `${online} онлайн / ${total} всего`;
       $("nodesOnlineCount").textContent = String(online);
       $("nodesOfflineCount").textContent = String(offline);
+      updateDashboardNodesToggle(total);
 
       const agg = nodeAggregates(users, trafficData);
       updateNodeTrend(rows, agg.onlineUsersByNode, agg.trafficByNode);
-      $("nodesCards").innerHTML = rows.map(r=>nodeCardHtml(r, agg.onlineUsersByNode, agg.trafficByNode)).join("") || `<div class="nodes-empty muted">Нет данных по нодам</div>`;
+      $("nodesCards").innerHTML = showRows.map(r=>nodeCardHtml(r, agg.onlineUsersByNode, agg.trafficByNode)).join("") || `<div class="nodes-empty muted">Нет данных по нодам</div>`;
       bindNodeCards();
     }
 
     function patchNodeCards(prev){
       const prevRows = Array.isArray(prev?.nodeHealth) ? prev.nodeHealth : [];
       const nextRows = Array.isArray(nodeHealth) ? nodeHealth : [];
+      const prevShowRows = nodeRowsForDashboard(prevRows);
+      const nextShowRows = nodeRowsForDashboard(nextRows);
       const cardsWrap = $("nodesCards");
       if(!cardsWrap){
         return;
@@ -1434,31 +1624,32 @@
       $("nodesSummaryHint").textContent = `${online} онлайн / ${total} всего`;
       $("nodesOnlineCount").textContent = String(online);
       $("nodesOfflineCount").textContent = String(offline);
+      updateDashboardNodesToggle(total);
 
       const prevAgg = nodeAggregates(prev?.users, prev?.trafficData);
       const nextAgg = nodeAggregates(users, trafficData);
       updateNodeTrend(nextRows, nextAgg.onlineUsersByNode, nextAgg.trafficByNode);
 
-      const prevKeys = prevRows.map(nodeStableKey);
-      const nextKeys = nextRows.map(nodeStableKey);
+      const prevKeys = prevShowRows.map(nodeStableKey);
+      const nextKeys = nextShowRows.map(nodeStableKey);
       if(prevKeys.length !== nextKeys.length || prevKeys.some((k,i)=>k!==nextKeys[i])){
         renderTopNodes();
         return;
       }
 
       const domCards = Array.from(cardsWrap.querySelectorAll(".node-card"));
-      if(domCards.length !== nextRows.length){
+      if(domCards.length !== nextShowRows.length){
         renderTopNodes();
         return;
       }
 
       let changed = 0;
-      for(let i=0;i<nextRows.length;i++){
-        const prevDigest = nodeCardDigest(prevRows[i], prevAgg.onlineUsersByNode, prevAgg.trafficByNode);
-        const nextDigest = nodeCardDigest(nextRows[i], nextAgg.onlineUsersByNode, nextAgg.trafficByNode);
+      for(let i=0;i<nextShowRows.length;i++){
+        const prevDigest = nodeCardDigest(prevShowRows[i], prevAgg.onlineUsersByNode, prevAgg.trafficByNode);
+        const nextDigest = nodeCardDigest(nextShowRows[i], nextAgg.onlineUsersByNode, nextAgg.trafficByNode);
         if(prevDigest !== nextDigest){
           const tmp = document.createElement("div");
-          tmp.innerHTML = nodeCardHtml(nextRows[i], nextAgg.onlineUsersByNode, nextAgg.trafficByNode);
+          tmp.innerHTML = nodeCardHtml(nextShowRows[i], nextAgg.onlineUsersByNode, nextAgg.trafficByNode);
           const nextCard = tmp.firstElementChild;
           if(nextCard){
             domCards[i].replaceWith(nextCard);
@@ -1552,8 +1743,6 @@
     function renderNodeFilters(){
       const selUsers = $("fNode");
       const selHot = $("fHotNode");
-      const prevUsers = selUsers?.value || "all";
-      const prevHot = selHot?.value || "all";
       const nameSet = new Set();
       (nodes||[]).forEach(n => { if(n && n.name) nameSet.add(String(n.name)); });
       users.forEach(u => {
@@ -1561,6 +1750,11 @@
         if(n) nameSet.add(n);
       });
       const sorted = [...nameSet].sort((a,b)=>a.localeCompare(b,"ru"));
+      const key = sorted.join("\0");
+      if(key === _nodeFilterKey) return;  // node list unchanged — skip DOM rebuild
+      _nodeFilterKey = key;
+      const prevUsers = selUsers?.value || "all";
+      const prevHot = selHot?.value || "all";
       const usersOptions = `<option value="all">Последнее подключение: все</option>` + sorted.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
       const hotOptions = `<option value="all">Нода: все</option>` + sorted.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
       if(selUsers){
@@ -1771,8 +1965,6 @@
         renderLogs();
       } else if(page === "p-hwid"){
         renderHwid();
-      } else if(page === "p-settings"){
-        renderConfig();
       }
     }
 
@@ -2167,6 +2359,11 @@
     }
 
     function renderNodeSshLive(){
+      if(!nodeSshLiveExecId) return;
+      if(_sshLiveRafId) return;
+      _sshLiveRafId = requestAnimationFrame(()=>{ _sshLiveRafId = 0; _doRenderNodeSshLive(); });
+    }
+    function _doRenderNodeSshLive(){
       if(!nodeSshLiveExecId) return;
       const box = $("nodeSshOutput");
       const summary = $("nodeSshSummary");
@@ -3156,17 +3353,45 @@
       </tr>`).join("") || emptyRow(5, "◌", "Нет данных по типам сетей", "Статистика появится после обработки логов");
     }
 
-    function renderShared(){
-      const m=new Map();
-      for(const u of users){
-        for(const ip of (u.active_ips||[])){
-          if(!m.has(ip)) m.set(ip,[]);
-          m.get(ip).push(u.user_identifier);
+    function buildIPUsageMap(sourceUsers=users){
+      const usage = new Map();
+      for(const u of (Array.isArray(sourceUsers) ? sourceUsers : [])){
+        const uid = String(u?.user_identifier || "").trim();
+        const uname = String(displayName(u) || uid || "-").trim();
+        if(!uid) continue;
+        const seen = new Set();
+        for(const rawIP of (Array.isArray(u?.active_ips) ? u.active_ips : [])){
+          const ip = String(rawIP || "").trim();
+          if(!ip || seen.has(ip)) continue;
+          seen.add(ip);
+          if(!usage.has(ip)) usage.set(ip, {count:0, ids:[], names:[]});
+          const row = usage.get(ip);
+          row.count += 1;
+          row.ids.push(uid);
+          row.names.push(uname);
         }
       }
-      const rows=[...m.entries()].filter(([,arr])=>arr.length>1).sort((a,b)=>b[1].length-a[1].length);
-      $("tbShared").innerHTML=rows.map(([ip,arr])=>`<tr><td>${ip}</td><td><span class="badge b-red">${arr.length}</span></td><td>${arr.map(esc).join(", ")}</td></tr>`).join("")
-        || emptyRow(3, "◉", "Общих IP нет", "Каждый IP используется только одним пользователем");
+      return usage;
+    }
+
+    function renderShared(){
+      const usage = buildIPUsageMap(users);
+      const rows = [...usage.entries()]
+        .filter(([,row]) => Number(row?.count || 0) > 1)
+        .sort((a,b) => (Number(b[1]?.count || 0) - Number(a[1]?.count || 0)));
+
+      $("tbShared").innerHTML = rows.map(([ip,row])=>{
+        const ids = Array.isArray(row?.ids) ? row.ids : [];
+        const count = Number(row?.count || ids.length || 0);
+        const hint = ids.join(", ");
+        const links = ids.map(uid => `<div>${renderUserCell(uid)}</div>`).join("") || "-";
+        return `<tr>
+          <td><span class="badge b-blue">${esc(ip)}</span></td>
+          <td title="${esc(hint)}"><span class="badge b-red">${count}</span></td>
+          <td>${links}</td>
+        </tr>`;
+      }).join("") || emptyRow(3, "◉", "Общих IP нет", "Каждый IP используется только одним пользователем");
+      bindUserOpenLinks($("tbShared"));
     }
 
     function logCategory(tp){
@@ -3235,6 +3460,12 @@
       if(!el) return;
       const overrides = d.runtime_overrides || {};
       const hasOverride = (key)=>Object.prototype.hasOwnProperty.call(overrides, key);
+      const renderLabelCell = (row, hint)=>`<div class="cfg-edit-label">
+        <div class="cfg-edit-title">${esc(row.label)} ${hint}</div>
+        ${row.help ? `<div class="cfg-edit-help"><b>Что делает:</b> ${esc(row.help)}</div>` : ""}
+        ${row.note ? `<div class="cfg-edit-note"><b>Когда менять:</b> ${esc(row.note)}</div>` : ""}
+        ${row.example ? `<div class="cfg-edit-example"><b>Пример:</b> ${esc(String(row.example))}</div>` : ""}
+      </div>`;
 
       const rows = CONFIG_EDIT_SCHEMA.map(row=>{
         const key = row.key;
@@ -3243,7 +3474,7 @@
         if(row.type === "bool"){
           const selected = !!value;
           return `<tr>
-            <td>${esc(row.label)} ${hint}</td>
+            <td>${renderLabelCell(row, hint)}</td>
             <td>
               <select id="cfgEdit_${esc(key)}" class="select" style="min-width:140px">
                 <option value="true" ${selected ? "selected" : ""}>Включено</option>
@@ -3262,9 +3493,11 @@
         const textValue = row.type === "list"
           ? (Array.isArray(value) ? value.join(", ") : String(value || ""))
           : String(value ?? "");
+        const placeholder = String(row.placeholder || "");
+        const title = [row.help, row.note, row.example].filter(Boolean).join(" | ");
         return `<tr>
-          <td>${esc(row.label)} ${hint}</td>
-          <td><input id="cfgEdit_${esc(key)}" type="${inputType}" class="input" style="width:100%;min-width:220px" value="${esc(textValue)}" ${attrs.join(" ")}></td>
+          <td>${renderLabelCell(row, hint)}</td>
+          <td><input id="cfgEdit_${esc(key)}" type="${inputType}" class="input" style="width:100%;min-width:220px" value="${esc(textValue)}" placeholder="${esc(placeholder)}" title="${esc(title || row.label)}" ${attrs.join(" ")}></td>
         </tr>`;
       });
 
@@ -3347,20 +3580,24 @@
       const permCount = Array.isArray(permanentSharers) ? permanentSharers.length : 0;
       const ctx1 = document.getElementById('chartStatus');
       if(ctx1){
-        if(chartStatus) chartStatus.destroy();
-        chartStatus = new Chart(ctx1, {
-          type: 'doughnut',
-          data: {
-            labels: ['Норма','Нарушители','Бан-лист','Перманент'],
-            datasets:[{
-              data:[normal,violatorsCount,banlistCount,permCount],
-              backgroundColor:[CHART_COLORS.green,CHART_COLORS.amber,CHART_COLORS.red,CHART_COLORS.blue],
-              borderColor:['#24c47a','#ffbe3b','#ff5477','#4f71ff'],
-              borderWidth:1, hoverOffset:6
-            }]
-          },
-          options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{labels:CHART_LEGEND,position:'bottom'}}}
-        });
+        if(chartStatus){
+          chartStatus.data.datasets[0].data = [normal,violatorsCount,banlistCount,permCount];
+          chartStatus.update('none');
+        } else {
+          chartStatus = new Chart(ctx1, {
+            type: 'doughnut',
+            data: {
+              labels: ['Норма','Нарушители','Бан-лист','Перманент'],
+              datasets:[{
+                data:[normal,violatorsCount,banlistCount,permCount],
+                backgroundColor:[CHART_COLORS.green,CHART_COLORS.amber,CHART_COLORS.red,CHART_COLORS.blue],
+                borderColor:['#24c47a','#ffbe3b','#ff5477','#4f71ff'],
+                borderWidth:1, hoverOffset:6
+              }]
+            },
+            options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{labels:CHART_LEGEND,position:'bottom'}}}
+          });
+        }
       }
 
       const netRows = Array.isArray(networkTypes)?networkTypes:[];
@@ -3375,48 +3612,65 @@
       }) : [CHART_COLORS.muted];
       const ctx2 = document.getElementById('chartNetwork');
       if(ctx2){
-        if(chartNetwork) chartNetwork.destroy();
-        chartNetwork = new Chart(ctx2, {
-          type:'bar',
-          data:{labels:netLabels,datasets:[{label:'Пользователей',data:netCounts,backgroundColor:netBg,borderRadius:6,borderWidth:0}]},
-          options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:CHART_TICK},grid:{color:CHART_GRID}},y:{ticks:{color:CHART_TICK,precision:0},grid:{color:CHART_GRID},beginAtZero:true}}}
-        });
+        if(chartNetwork){
+          chartNetwork.data.labels = netLabels;
+          chartNetwork.data.datasets[0].data = netCounts;
+          chartNetwork.data.datasets[0].backgroundColor = netBg;
+          chartNetwork.update('none');
+        } else {
+          chartNetwork = new Chart(ctx2, {
+            type:'bar',
+            data:{labels:netLabels,datasets:[{label:'Пользователей',data:netCounts,backgroundColor:netBg,borderRadius:6,borderWidth:0}]},
+            options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:CHART_TICK},grid:{color:CHART_GRID}},y:{ticks:{color:CHART_TICK,precision:0},grid:{color:CHART_GRID},beginAtZero:true}}}
+          });
+        }
       }
 
       const onlineN = (nodeHealth||[]).filter(n=>n.online).length;
       const offlineN = (nodeHealth||[]).length - onlineN;
       const ctx3 = document.getElementById('chartNodes');
       if(ctx3){
-        if(chartNodes) chartNodes.destroy();
-        chartNodes = new Chart(ctx3, {
-          type:'doughnut',
-          data:{labels:['Онлайн','Оффлайн'],datasets:[{data:[onlineN||0,offlineN||0],backgroundColor:[CHART_COLORS.green,CHART_COLORS.red],borderColor:['#24c47a','#ff5477'],borderWidth:1,hoverOffset:6}]},
-          options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{labels:CHART_LEGEND,position:'bottom'}}}
-        });
+        if(chartNodes){
+          chartNodes.data.datasets[0].data = [onlineN||0,offlineN||0];
+          chartNodes.update('none');
+        } else {
+          chartNodes = new Chart(ctx3, {
+            type:'doughnut',
+            data:{labels:['Онлайн','Оффлайн'],datasets:[{data:[onlineN||0,offlineN||0],backgroundColor:[CHART_COLORS.green,CHART_COLORS.red],borderColor:['#24c47a','#ff5477'],borderWidth:1,hoverOffset:6}]},
+            options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{labels:CHART_LEGEND,position:'bottom'}}}
+          });
+        }
       }
 
       const ctx4 = document.getElementById('chartTrend');
       if(ctx4 && trendHistory.timestamps.length > 0){
-        if(chartTrend) chartTrend.destroy();
-        chartTrend = new Chart(ctx4, {
-          type:'line',
-          data:{
-            labels: trendHistory.timestamps,
-            datasets:[
-              {label:'Онлайн',data:[...trendHistory.activeUsers],borderColor:'rgba(36,196,122,.9)',backgroundColor:'rgba(36,196,122,.08)',tension:.35,pointRadius:0,borderWidth:2,fill:true},
-              {label:'Нарушители',data:[...trendHistory.violators],borderColor:'rgba(255,190,59,.9)',backgroundColor:'rgba(255,190,59,.07)',tension:.35,pointRadius:0,borderWidth:2,fill:true},
-              {label:'Баны',data:[...trendHistory.bans],borderColor:'rgba(255,84,119,.9)',backgroundColor:'rgba(255,84,119,.07)',tension:.35,pointRadius:0,borderWidth:2,fill:true}
-            ]
-          },
-          options:{
-            responsive:true,maintainAspectRatio:false,animation:false,
-            plugins:{legend:{labels:CHART_LEGEND,position:'bottom'}},
-            scales:{
-              x:{ticks:{color:CHART_TICK,maxTicksLimit:8,maxRotation:0},grid:{color:CHART_GRID}},
-              y:{ticks:{color:CHART_TICK,precision:0},grid:{color:CHART_GRID},beginAtZero:true}
+        if(chartTrend){
+          chartTrend.data.labels = [...trendHistory.timestamps];
+          chartTrend.data.datasets[0].data = [...trendHistory.activeUsers];
+          chartTrend.data.datasets[1].data = [...trendHistory.violators];
+          chartTrend.data.datasets[2].data = [...trendHistory.bans];
+          chartTrend.update('none');
+        } else {
+          chartTrend = new Chart(ctx4, {
+            type:'line',
+            data:{
+              labels: trendHistory.timestamps,
+              datasets:[
+                {label:'Онлайн',data:[...trendHistory.activeUsers],borderColor:'rgba(36,196,122,.9)',backgroundColor:'rgba(36,196,122,.08)',tension:.35,pointRadius:0,borderWidth:2,fill:true},
+                {label:'Нарушители',data:[...trendHistory.violators],borderColor:'rgba(255,190,59,.9)',backgroundColor:'rgba(255,190,59,.07)',tension:.35,pointRadius:0,borderWidth:2,fill:true},
+                {label:'Баны',data:[...trendHistory.bans],borderColor:'rgba(255,84,119,.9)',backgroundColor:'rgba(255,84,119,.07)',tension:.35,pointRadius:0,borderWidth:2,fill:true}
+              ]
+            },
+            options:{
+              responsive:true,maintainAspectRatio:false,animation:false,
+              plugins:{legend:{labels:CHART_LEGEND,position:'bottom'}},
+              scales:{
+                x:{ticks:{color:CHART_TICK,maxTicksLimit:8,maxRotation:0},grid:{color:CHART_GRID}},
+                y:{ticks:{color:CHART_TICK,precision:0},grid:{color:CHART_GRID},beginAtZero:true}
+              }
             }
-          }
-        });
+          });
+        }
       }
     }
 
@@ -3493,6 +3747,7 @@
         const geoMismatch = sharing?.geo_mismatch || false;
         const nodeName = resolveNodeLabel(d.last_node_display, d.last_node);
         const ipRows = Array.isArray(d.active_ips) ? d.active_ips : [];
+        const ipUsage = buildIPUsageMap(users);
         const sourceSet = new Set(ipRows.map(ip => String(ip.subnet24 || ip.ip || "").trim()).filter(Boolean));
         const sourceCount = sourceSet.size;
         const networkCounters = { mobile: 0, wifi: 0, cable: 0, unknown: 0 };
@@ -3540,9 +3795,13 @@
           const dc = tlDotClass(h.type);
           return `<div class="tl-item">
             <div class="tl-dot${dc?' '+dc:''}"></div>
-            <div class="tl-time">${t(h.timestamp)}</div>
-            <div class="tl-type">${tlTypeLabel(h.type)}</div>
-            <div class="tl-msg">${tlMsgHtml(h.type,h.message||"",h.source_ip||"")}</div>
+            <div class="tl-body">
+              <div class="tl-head">
+                <span class="tl-badge${dc?' '+dc:''}">${tlTypeLabel(h.type)}</span>
+                <span class="tl-time">${t(h.timestamp)}</span>
+              </div>
+              <div class="tl-msg">${tlMsgHtml(h.type,h.message||"",h.source_ip||"")}</div>
+            </div>
           </div>`;
         }).join("")}</div>` : `<p class="muted">История пуста</p>`;
 
@@ -3555,9 +3814,9 @@
         $("mBody").innerHTML = `
           <div class="user-shell">
             <section class="user-top">
-              <div>
+              <div class="user-top-left">
                 <h2 class="user-title">${esc(name)}</h2>
-                <div class="user-id">ID: ${esc(d.user_identifier || "-")}</div>
+                <div class="user-id">${esc(d.user_identifier || "-")}</div>
                 <div class="user-tags">
                   <span class="meta-chip"><span class="k">Активность</span>${connectionBadge}</span>
                   <span class="meta-chip"><span class="k">Статус</span>${statusBadge}</span>
@@ -3625,7 +3884,17 @@
             <section class="user-card">
               <h3>Текущие IP адреса (за TTL)</h3>
               <div class="facts-row"><span>Сводка по сетям</span><b>${esc(networkSummary)}</b></div>
-              <div class="table-wrap"><table><thead><tr><th>IP</th><th>Нода</th><th>TTL</th><th>Подсеть</th><th>Сеть</th><th>Провайдер</th><th>Страна</th><th>Организация</th></tr></thead><tbody>${ipRows.map(ip=>`<tr><td>${esc(ip.ip)}</td><td>${esc(resolveNodeLabel(ip.node_display, ip.node_name))}</td><td>${ip.ttl_seconds}s</td><td>${esc(ip.subnet24)}</td><td>${esc(netTypeName(ip.network_type))}</td><td>${esc(ip.network_provider||"-")}</td><td>${esc(ip.network_country||"-")}</td><td>${esc(ip.network_org||"-")}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Нет активных IP</td></tr>`}</tbody></table></div>
+              <div class="table-wrap"><table><thead><tr><th>IP</th><th>С IP сейчас</th><th>Нода</th><th>TTL</th><th>Подсеть</th><th>Сеть</th><th>Провайдер</th><th>Страна</th><th>Организация</th></tr></thead><tbody>${ipRows.map(ip=>{
+                const ipKey = String(ip.ip || "").trim();
+                const shared = ipUsage.get(ipKey);
+                const members = Array.isArray(shared?.ids) && shared.ids.length ? shared.ids : [String(d.user_identifier || "-")];
+                const connCount = Number(shared?.count || members.length || 1);
+                const hint = members.join(", ");
+                const countBadge = connCount > 1
+                  ? `<span class="badge b-red">${connCount}</span>`
+                  : `<span class="badge b-green">${connCount}</span>`;
+                return `<tr><td>${esc(ip.ip)}</td><td title="${esc(hint)}">${countBadge}</td><td>${esc(resolveNodeLabel(ip.node_display, ip.node_name))}</td><td>${ip.ttl_seconds}s</td><td>${esc(ip.subnet24)}</td><td>${esc(netTypeName(ip.network_type))}</td><td>${esc(ip.network_provider||"-")}</td><td>${esc(ip.network_country||"-")}</td><td>${esc(ip.network_org||"-")}</td></tr>`;
+              }).join("") || `<tr><td colspan="9" class="muted">Нет активных IP</td></tr>`}</tbody></table></div>
             </section>
             <section class="user-card">
               <h3>HWID устройства (${hwidCount})</h3>
@@ -3921,6 +4190,7 @@
     $("fTrafficNode").onchange=renderTraffic;
     $("fTrafficStatus").onchange=renderTraffic;
     document.querySelectorAll("#trafficPeriodGroup .seg-btn").forEach(btn=>btn.onclick=()=>setTrafficPeriod(btn.dataset.period));
+    if($("nodesToggleBtn")) $("nodesToggleBtn").onclick=toggleDashboardNodes;
     $("changePassBtn").onclick=changePassword;
     if($("saveOverridesBtn")) $("saveOverridesBtn").onclick=saveRuntimeOverrides;
     if($("resetOverridesBtn")) $("resetOverridesBtn").onclick=resetRuntimeOverrides;
