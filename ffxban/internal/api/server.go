@@ -6,14 +6,15 @@ import (
 	"crypto/rand"
 	_ "embed"
 	"encoding/hex"
+	"encoding/json"
 	"ffxban/internal/config"
 	"ffxban/internal/models"
 	"ffxban/internal/processor"
 	"ffxban/internal/services/alerter"
 	"ffxban/internal/services/blocker"
+	"ffxban/internal/services/nodessh"
 	"ffxban/internal/services/panel"
 	"ffxban/internal/services/storage"
-	"ffxban/internal/services/threexui"
 	"fmt"
 	"log"
 	"net/http"
@@ -28,14 +29,25 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/crypto/bcrypt"
 )
 
 //go:embed panel.html
 var panelHTML []byte
 
+//go:embed panel.css
+var panelCSS []byte
+
 var durationPattern = regexp.MustCompile(`^(\d+[smhd]|permanent)$`)
 var onlinePresenceWindow = 3 * time.Minute
+
+const (
+	panelLoginMaxFailedAttempts = 5
+	panelLoginLockoutDuration   = 60 * time.Second
+)
 
 type panelOnDemandRefresher interface {
 	RefreshIfStale(ctx context.Context, maxAge time.Duration) bool
@@ -45,21 +57,84 @@ type panelSession struct {
 	ExpiresAt time.Time
 }
 
+type panelLoginAttempt struct {
+	FailedCount int
+	LockedUntil time.Time
+	LastAttempt time.Time
+}
+
+type runtimeConfigOverrides struct {
+	MaxIPsPerUser               *int
+	BlockDuration               *string
+	UserIPTTLSeconds            *int
+	ClearIPsDelaySeconds        *int
+	SharingDetectionEnabled     *bool
+	TriggerCount                *int
+	TriggerPeriodSeconds        *int
+	TriggerMinIntervalSeconds   *int
+	SharingSustainSeconds       *int
+	BanlistThresholdSeconds     *int
+	SharingSourceWindowSeconds  *int
+	SubnetGrouping              *bool
+	SharingBlockOnBanlistOnly   *bool
+	SharingBlockOnViolatorOnly  *bool
+	SharingHardwareGuard        *bool
+	SharingPermanentBanEnabled  *bool
+	SharingPermanentBanDuration *string
+	BanEscalationEnabled        *bool
+	BanEscalationDurations      *[]string
+	GeoSharingEnabled           *bool
+	GeoSharingMinCountries      *int
+	NetworkPolicyEnabled        *bool
+	NetworkMobileGraceIPs       *int
+	NetworkForceBlockExcessIPs  *int
+	HeuristicsEnabled           *bool
+	HeuristicsWindowSeconds     *int
+	NodeHeartbeatTimeoutSeconds *int
+	PrometheusEnabled           *bool
+}
+
+type serverMetrics struct {
+	registry           *prometheus.Registry
+	handler            http.Handler
+	sharingViolators   prometheus.Gauge
+	sharingBanlist     prometheus.Gauge
+	sharingPermanent   prometheus.Gauge
+	geoMismatches      prometheus.Gauge
+	activeBans         prometheus.Gauge
+	nodesTotal         prometheus.Gauge
+	nodesOnline        prometheus.Gauge
+	logQueueLen        prometheus.Gauge
+	sideEffectQueueLen prometheus.Gauge
+	activeSessions     prometheus.Gauge
+	uptimeSeconds      prometheus.Gauge
+}
+
 type Server struct {
 	router        *gin.Engine
 	processor     *processor.LogProcessor
 	storage       storage.IPStorage
 	blocker       blocker.Blocker
-	threexui      *threexui.Manager
 	notifier      alerter.Notifier
 	limitProvider panel.UserLimitProvider
 	networkClass  networkClassifier
 	cfg           *config.Config
+	baseConfig    config.Config
 	port          string
 	wsHub         *wsHub
+	nodeSSH       *nodessh.Executor
+	startedAt     time.Time
+	buildVersion  string
+	metrics       *serverMetrics
 
 	sessionMu sync.Mutex
 	sessions  map[string]panelSession
+
+	loginMu       sync.Mutex
+	loginAttempts map[string]panelLoginAttempt
+
+	configMu        sync.RWMutex
+	configOverrides runtimeConfigOverrides
 }
 
 type networkClassifier interface {
@@ -79,9 +154,9 @@ func NewServer(
 	proc *processor.LogProcessor,
 	storage storage.IPStorage,
 	blk blocker.Blocker,
-	txManager *threexui.Manager,
 	limitProvider panel.UserLimitProvider,
 	networkClass networkClassifier,
+	buildVersion string,
 ) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
@@ -89,19 +164,40 @@ func NewServer(
 	hub := newWsHub()
 	go hub.Run()
 
+	nodeSSHExec, sshErr := nodessh.New(nodessh.Config{
+		Enabled:        cfg.NodeSSHEnabled,
+		User:           cfg.NodeSSHUser,
+		Password:       cfg.NodeSSHPassword,
+		PrivateKey:     cfg.NodeSSHPrivateKey,
+		DefaultPort:    cfg.NodeSSHDefaultPort,
+		ConnectTimeout: cfg.NodeSSHConnectTimeout,
+		MaxOutputBytes: cfg.NodeSSHMaxOutputBytes,
+	})
+	if sshErr != nil {
+		log.Printf("Warning: SSH executor disabled: %v", sshErr)
+	}
+
 	s := &Server{
 		router:        router,
 		processor:     proc,
 		storage:       storage,
 		blocker:       blk,
-		threexui:      txManager,
 		notifier:      alerter.NewWebhookAlerter(cfg.AlertWebhookURL, cfg.AlertWebhookMode, cfg.AlertWebhookToken, cfg.AlertWebhookAuthHeader, cfg.AlertWebhookUsernamePrefix),
 		limitProvider: limitProvider,
 		networkClass:  networkClass,
 		cfg:           cfg,
+		baseConfig:    *cfg,
 		port:          cfg.Port,
 		sessions:      make(map[string]panelSession),
 		wsHub:         hub,
+		nodeSSH:       nodeSSHExec,
+		startedAt:     time.Now(),
+		buildVersion:  strings.TrimSpace(buildVersion),
+		loginAttempts: make(map[string]panelLoginAttempt),
+		metrics:       newServerMetrics(),
+	}
+	if s.buildVersion == "" {
+		s.buildVersion = "dev"
 	}
 
 	// Подписываем hub на события из processor'а
@@ -109,6 +205,9 @@ func NewServer(
 
 	if err := s.ensurePanelPasswordHash(); err != nil {
 		log.Printf("Warning: не удалось инициализировать пароль панели: %v", err)
+	}
+	if err := s.loadRuntimeConfigOverrides(); err != nil {
+		log.Printf("Warning: не удалось загрузить runtime-overrides: %v", err)
 	}
 
 	s.setupRoutes()
@@ -128,6 +227,7 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/provision", s.handleNodeProvision)
 	s.router.GET("/panel", s.handlePanel)
 	s.router.GET("/panel/", s.handlePanel)
+	s.router.GET("/panel.css", s.handlePanelCSS)
 
 	panelGroup := s.router.Group("/api/panel")
 	panelGroup.POST("/login", s.handlePanelLogin)
@@ -140,6 +240,7 @@ func (s *Server) setupRoutes() {
 	internal.GET("/stats", s.handleInternalStats)
 	internal.GET("/sysinfo", s.handleSysInfo)
 	internal.GET("/users", s.handleInternalUsers)
+	internal.GET("/traffic/users", s.handleInternalTrafficUsers)
 	internal.GET("/users/:id", s.handleInternalUserDetails)
 	internal.GET("/logs", s.handleInternalLogs)
 	internal.GET("/bans/active", s.handleInternalActiveBans)
@@ -148,18 +249,20 @@ func (s *Server) setupRoutes() {
 	internal.GET("/networks/types", s.handleInternalNetworkTypes)
 	internal.GET("/nodes/health", s.handleInternalNodeHealth)
 	internal.GET("/nodes", s.handleInternalNodes)
+	internal.POST("/nodes/ssh/exec", s.handleNodeSSHExec)
+	internal.GET("/nodes/ssh/creds", s.handleNodeSSHListCreds)
+	internal.POST("/nodes/ssh/creds", s.handleNodeSSHSaveCreds)
+	internal.DELETE("/nodes/ssh/creds", s.handleNodeSSHDeleteCreds)
+	internal.GET("/nodes/ssh/terminal", s.handleSSHTerminal)
+	internal.GET("/nodes/ssh/terminal/nodes", s.handleSSHTerminalNodes)
 	internal.POST("/actions/block", s.handleManualBlock)
 	internal.POST("/actions/unblock", s.handleManualUnblock)
 	internal.POST("/actions/clear", s.handleManualClear)
 	internal.POST("/actions/reset_sharing", s.handleResetSharing)
 	internal.GET("/config", s.handleConfig)
+	internal.POST("/config/overrides", s.handleConfigOverridesUpdate)
+	internal.DELETE("/config/overrides", s.handleConfigOverridesReset)
 	internal.GET("/ws", s.handleWebSocket)
-
-	if s.cfg.ThreexuiEnabled {
-		txGroup := internal.Group("/3xui")
-		txGroup.GET("/users", s.handleThreexuiUsers)
-		txGroup.GET("/servers", s.handleThreexuiServers)
-	}
 }
 
 func (s *Server) Run() error {
@@ -239,9 +342,18 @@ func (s *Server) handleHealthCheck(c *gin.Context) {
 	defer cancel()
 
 	status := http.StatusOK
+	activeSessions := s.processor.CountActiveSessions(onlinePresenceWindow)
+	uptime := time.Since(s.startedAt)
+	if uptime < 0 {
+		uptime = 0
+	}
 	response := gin.H{
 		"redis_connection":    "ok",
 		"rabbitmq_connection": "ok",
+		"active_sessions":     activeSessions,
+		"uptime_seconds":      int64(uptime.Seconds()),
+		"started_at":          s.startedAt.UTC().Format(time.RFC3339),
+		"version":             s.buildVersion,
 	}
 
 	if err := s.storage.Ping(ctx); err != nil {
@@ -265,6 +377,10 @@ func (s *Server) handleHealthCheck(c *gin.Context) {
 
 func (s *Server) handlePanel(c *gin.Context) {
 	c.Data(http.StatusOK, "text/html; charset=utf-8", panelHTML)
+}
+
+func (s *Server) handlePanelCSS(c *gin.Context) {
+	c.Data(http.StatusOK, "text/css; charset=utf-8", panelCSS)
 }
 
 func (s *Server) apiAuthMiddleware() gin.HandlerFunc {
@@ -387,6 +503,79 @@ func (s *Server) updatePanelPassword(newPassword string) error {
 	return s.storage.SetPanelPasswordHash(ctx, string(hash))
 }
 
+func (s *Server) panelLoginClientIP(c *gin.Context) string {
+	ip := strings.TrimSpace(c.ClientIP())
+	if ip == "" {
+		return "unknown"
+	}
+	return ip
+}
+
+func (s *Server) panelLoginLockInfo(ip string) (bool, int) {
+	now := time.Now()
+
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+
+	for key, state := range s.loginAttempts {
+		if state.LockedUntil.IsZero() && state.FailedCount == 0 {
+			delete(s.loginAttempts, key)
+			continue
+		}
+		if state.LockedUntil.Before(now.Add(-10 * time.Minute)) {
+			delete(s.loginAttempts, key)
+		}
+	}
+
+	state, ok := s.loginAttempts[ip]
+	if !ok {
+		return false, 0
+	}
+	if state.LockedUntil.After(now) {
+		retry := int(state.LockedUntil.Sub(now).Seconds())
+		if retry < 1 {
+			retry = 1
+		}
+		return true, retry
+	}
+	return false, 0
+}
+
+func (s *Server) panelLoginFailed(ip string) (bool, int) {
+	now := time.Now()
+
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+
+	state := s.loginAttempts[ip]
+	state.LastAttempt = now
+	if state.LockedUntil.After(now) {
+		retry := int(state.LockedUntil.Sub(now).Seconds())
+		if retry < 1 {
+			retry = 1
+		}
+		s.loginAttempts[ip] = state
+		return true, retry
+	}
+
+	state.FailedCount++
+	if state.FailedCount >= panelLoginMaxFailedAttempts {
+		state.FailedCount = 0
+		state.LockedUntil = now.Add(panelLoginLockoutDuration)
+		s.loginAttempts[ip] = state
+		return true, int(panelLoginLockoutDuration.Seconds())
+	}
+
+	s.loginAttempts[ip] = state
+	return false, 0
+}
+
+func (s *Server) panelLoginSucceeded(ip string) {
+	s.loginMu.Lock()
+	delete(s.loginAttempts, ip)
+	s.loginMu.Unlock()
+}
+
 func (s *Server) handlePanelLogin(c *gin.Context) {
 	var req struct {
 		Password string `json:"password"`
@@ -401,15 +590,32 @@ func (s *Server) handlePanelLogin(c *gin.Context) {
 		return
 	}
 
+	clientIP := s.panelLoginClientIP(c)
+	if locked, retry := s.panelLoginLockInfo(clientIP); locked {
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"error":               "too many failed attempts",
+			"retry_after_seconds": retry,
+		})
+		return
+	}
+
 	ok, err := s.verifyPanelPassword(req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if !ok {
+		if locked, retry := s.panelLoginFailed(clientIP); locked {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":               "too many failed attempts",
+				"retry_after_seconds": retry,
+			})
+			return
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid password"})
 		return
 	}
+	s.panelLoginSucceeded(clientIP)
 
 	if err := s.createPanelSession(c); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -574,6 +780,223 @@ type userRow struct {
 	ActiveIPs       []string                 `json:"active_ips"`
 	Heuristics      *models.HeuristicMetrics `json:"heuristics,omitempty"`
 	Sharing         *models.SharingStatus    `json:"sharing,omitempty"`
+}
+
+type trafficUserRow struct {
+	UserIdentifier       string    `json:"user_identifier"`
+	Username             string    `json:"username,omitempty"`
+	Email                string    `json:"email,omitempty"`
+	Tariff               string    `json:"tariff,omitempty"`
+	Tag                  string    `json:"tag,omitempty"`
+	Status               string    `json:"status"`
+	DeviceLimit          int       `json:"device_limit"`
+	ConnectedIPs         int       `json:"connected_ips"`
+	Online               bool      `json:"online"`
+	LastNode             string    `json:"last_node,omitempty"`
+	LastNodeDisplay      string    `json:"last_node_display,omitempty"`
+	TrafficLimitBytes    int64     `json:"traffic_limit_bytes"`
+	UsedTrafficBytes     int64     `json:"used_traffic_bytes"`
+	LifetimeUsedTraffic  int64     `json:"lifetime_used_traffic_bytes"`
+	UsedPercent          float64   `json:"used_percent"`
+	FirstConnectedAt     time.Time `json:"first_connected_at,omitempty"`
+	OnlineAt             time.Time `json:"online_at,omitempty"`
+	ExpireAt             time.Time `json:"expire_at,omitempty"`
+	HWIDDevicesCount     int       `json:"hwid_devices_count"`
+	ActiveInternalSquads []string  `json:"active_internal_squad_names,omitempty"`
+}
+
+func (s *Server) handleInternalTrafficUsers(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+	defer cancel()
+	s.refreshPanelLimitsIfStale(ctx)
+
+	selectedPeriod := strings.TrimSpace(c.Query("period"))
+	if selectedPeriod == "" {
+		selectedPeriod = "30d"
+	}
+	onlineOnly := true
+	if raw := strings.TrimSpace(strings.ToLower(c.Query("online_only"))); raw != "" {
+		onlineOnly = raw != "0" && raw != "false" && raw != "no"
+	}
+
+	if s.limitProvider == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"rows": []trafficUserRow{},
+			"summary": gin.H{
+				"total_users":       0,
+				"online_users":      0,
+				"over_limit_users":  0,
+				"total_used_bytes":  0,
+				"total_limit_bytes": 0,
+				"coverage_percent":  0.0,
+			},
+			"filters": gin.H{
+				"tariffs":  []string{},
+				"statuses": []string{},
+				"nodes":    []string{},
+			},
+			"meta": gin.H{
+				"generated_at":                 time.Now(),
+				"selected_period":              selectedPeriod,
+				"period_supported":             false,
+				"per_node_breakdown_supported": false,
+			},
+		})
+		return
+	}
+
+	profiles := s.limitProvider.ListUserProfiles()
+	rows := make([]trafficUserRow, 0, len(profiles))
+	tariffSet := make(map[string]struct{})
+	statusSet := make(map[string]struct{})
+	nodeSet := make(map[string]struct{})
+
+	var totalUsedBytes int64
+	var totalLimitBytes int64
+	onlineUsers := 0
+	overLimitUsers := 0
+
+	for _, profile := range profiles {
+		userIdentifier := strings.TrimSpace(profile.UserIdentifier)
+		if userIdentifier == "" {
+			userIdentifier = strings.TrimSpace(profile.Email)
+		}
+		if userIdentifier == "" {
+			userIdentifier = strings.TrimSpace(profile.Username)
+		}
+		if userIdentifier == "" {
+			userIdentifier = strings.TrimSpace(profile.UUID)
+		}
+		if userIdentifier == "" {
+			continue
+		}
+
+		activeIPs, err := s.storage.GetUserActiveIPs(ctx, userIdentifier)
+		if err != nil {
+			activeIPs = map[string]int{}
+		}
+		connectedIPs := len(activeIPs)
+		online := connectedIPs > 0
+		if onlineOnly && !online {
+			continue
+		}
+
+		status := normalizeTrafficStatus(profile.Status, online)
+		lastNode := strings.TrimSpace(profile.LastConnectedNodeID)
+		if lastNode == "" {
+			lastNode = strings.TrimSpace(profile.LastConnectedNode)
+		}
+		lastNodeDisplay := strings.TrimSpace(s.resolveNodeDisplayName(lastNode, profile))
+		if lastNodeDisplay == "" && strings.TrimSpace(profile.LastConnectedNode) != "" {
+			lastNodeDisplay = strings.TrimSpace(profile.LastConnectedNode)
+		}
+		if lastNodeDisplay == "" {
+			lastNodeDisplay = "unknown"
+		}
+
+		deviceLimit := profile.HWIDDeviceLimit
+		if deviceLimit <= 0 {
+			if limit, ok := s.limitProvider.GetUserLimit(userIdentifier); ok && limit > 0 {
+				deviceLimit = limit
+			}
+		}
+		if deviceLimit <= 0 {
+			limit := s.processor.ResolveUserIPLimit(ctx, userIdentifier)
+			if limit > 0 {
+				deviceLimit = limit
+			}
+		}
+
+		usedPercent := 0.0
+		if profile.TrafficLimitBytes > 0 {
+			usedPercent = float64(profile.UsedTrafficBytes) * 100 / float64(profile.TrafficLimitBytes)
+		}
+
+		row := trafficUserRow{
+			UserIdentifier:       userIdentifier,
+			Username:             strings.TrimSpace(profile.Username),
+			Email:                strings.TrimSpace(profile.Email),
+			Tariff:               strings.TrimSpace(profile.Tariff),
+			Tag:                  strings.TrimSpace(profile.Tag),
+			Status:               status,
+			DeviceLimit:          deviceLimit,
+			ConnectedIPs:         connectedIPs,
+			Online:               online,
+			LastNode:             lastNode,
+			LastNodeDisplay:      lastNodeDisplay,
+			TrafficLimitBytes:    profile.TrafficLimitBytes,
+			UsedTrafficBytes:     profile.UsedTrafficBytes,
+			LifetimeUsedTraffic:  profile.LifetimeUsedTrafficBytes,
+			UsedPercent:          usedPercent,
+			FirstConnectedAt:     profile.FirstConnectedAt,
+			OnlineAt:             profile.OnlineAt,
+			ExpireAt:             profile.ExpireAt,
+			HWIDDevicesCount:     len(profile.HWIDDevices),
+			ActiveInternalSquads: profile.ActiveInternalSquadNames,
+		}
+		rows = append(rows, row)
+
+		if row.Tariff != "" {
+			tariffSet[row.Tariff] = struct{}{}
+		}
+		if row.Status != "" {
+			statusSet[row.Status] = struct{}{}
+		}
+		if row.LastNodeDisplay != "" {
+			nodeSet[row.LastNodeDisplay] = struct{}{}
+		}
+		if row.Online {
+			onlineUsers++
+		}
+		if row.TrafficLimitBytes > 0 {
+			totalLimitBytes += row.TrafficLimitBytes
+			if row.UsedTrafficBytes >= row.TrafficLimitBytes {
+				overLimitUsers++
+			}
+		}
+		if row.UsedTrafficBytes > 0 {
+			totalUsedBytes += row.UsedTrafficBytes
+		}
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].UsedPercent != rows[j].UsedPercent {
+			return rows[i].UsedPercent > rows[j].UsedPercent
+		}
+		if rows[i].UsedTrafficBytes != rows[j].UsedTrafficBytes {
+			return rows[i].UsedTrafficBytes > rows[j].UsedTrafficBytes
+		}
+		return strings.ToLower(rows[i].UserIdentifier) < strings.ToLower(rows[j].UserIdentifier)
+	})
+
+	coveragePercent := 0.0
+	if totalLimitBytes > 0 {
+		coveragePercent = float64(totalUsedBytes) * 100 / float64(totalLimitBytes)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"rows": rows,
+		"summary": gin.H{
+			"total_users":       len(rows),
+			"online_users":      onlineUsers,
+			"over_limit_users":  overLimitUsers,
+			"total_used_bytes":  totalUsedBytes,
+			"total_limit_bytes": totalLimitBytes,
+			"coverage_percent":  coveragePercent,
+		},
+		"filters": gin.H{
+			"tariffs":  sortedSetValues(tariffSet),
+			"statuses": sortedSetValues(statusSet),
+			"nodes":    sortedSetValues(nodeSet),
+		},
+		"meta": gin.H{
+			"generated_at":                 time.Now(),
+			"selected_period":              selectedPeriod,
+			"online_only":                  onlineOnly,
+			"period_supported":             false,
+			"per_node_breakdown_supported": false,
+		},
+	})
 }
 
 func (s *Server) handleInternalUsers(c *gin.Context) {
@@ -798,7 +1221,7 @@ func (s *Server) handleInternalUserDetails(c *gin.Context) {
 			resp["hwid_devices"] = profile.HWIDDevices
 		}
 	}
-	// Устройства из Redis (для 3x-ui и как дополнение к Remnawave).
+	// Устройства из Redis как дополнение к данным панели.
 	if devs, err := s.storage.GetUserDeviceReports(c.Request.Context(), userIdentifier); err == nil && len(devs) > 0 {
 		if !hasProfile || len(profile.HWIDDevices) == 0 {
 			resp["hwid_devices"] = devs
@@ -867,6 +1290,7 @@ func (s *Server) refreshPanelLimitsIfStale(ctx context.Context) {
 func (s *Server) handleInternalNodes(c *gin.Context) {
 	unique := make(map[string]struct{})
 	rows := make([]gin.H, 0, 32)
+	sshEnabled := s.nodeSSH != nil && s.nodeSSH.Enabled()
 
 	if s.limitProvider != nil {
 		for _, node := range s.limitProvider.ListNodes() {
@@ -879,9 +1303,12 @@ func (s *Server) handleInternalNodes(c *gin.Context) {
 				continue
 			}
 			unique[key] = struct{}{}
+			address := strings.TrimSpace(node.Address)
 			rows = append(rows, gin.H{
-				"id":   strings.TrimSpace(node.ID),
-				"name": name,
+				"id":          strings.TrimSpace(node.ID),
+				"name":        name,
+				"address":     address,
+				"ssh_enabled": sshEnabled && address != "",
 			})
 		}
 	}
@@ -890,6 +1317,382 @@ func (s *Server) handleInternalNodes(c *gin.Context) {
 		return strings.ToLower(rows[i]["name"].(string)) < strings.ToLower(rows[j]["name"].(string))
 	})
 	c.JSON(http.StatusOK, rows)
+}
+
+type nodeSSHTarget struct {
+	ID      string
+	Name    string
+	Address string
+}
+
+func (s *Server) resolveNodeSSHTargets(refs []string) ([]nodeSSHTarget, []gin.H) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+
+	index := make(map[string]panel.NodeProfile)
+	if s.limitProvider != nil {
+		for _, node := range s.limitProvider.ListNodes() {
+			id := strings.TrimSpace(node.ID)
+			name := strings.TrimSpace(node.Name)
+			address := strings.TrimSpace(node.Address)
+
+			if id != "" {
+				index[strings.ToLower(id)] = node
+			}
+			if name != "" {
+				index[strings.ToLower(name)] = node
+			}
+			if address != "" {
+				index[strings.ToLower(address)] = node
+				if normalized := s.nodeSSH.NormalizeAddress(address); normalized != "" {
+					index[strings.ToLower(normalized)] = node
+				}
+			}
+		}
+	}
+
+	seen := make(map[string]struct{})
+	out := make([]nodeSSHTarget, 0, len(refs))
+	unresolved := make([]gin.H, 0, len(refs))
+
+	for _, raw := range refs {
+		ref := strings.TrimSpace(raw)
+		if ref == "" {
+			continue
+		}
+		key := strings.ToLower(ref)
+		if profile, ok := index[key]; ok {
+			addr := strings.TrimSpace(profile.Address)
+			if addr == "" {
+				unresolved = append(unresolved, gin.H{"ref": ref, "error": "node has empty address"})
+				continue
+			}
+
+			uniqueKey := strings.ToLower(strings.TrimSpace(profile.ID) + "|" + strings.TrimSpace(profile.Name) + "|" + addr)
+			if _, exists := seen[uniqueKey]; exists {
+				continue
+			}
+			seen[uniqueKey] = struct{}{}
+			out = append(out, nodeSSHTarget{
+				ID:      strings.TrimSpace(profile.ID),
+				Name:    strings.TrimSpace(profile.Name),
+				Address: addr,
+			})
+			continue
+		}
+
+		// Fallback: разрешаем передать адрес ноды напрямую.
+		normalized := s.nodeSSH.NormalizeAddress(ref)
+		if normalized != "" {
+			if _, exists := seen[strings.ToLower(normalized)]; exists {
+				continue
+			}
+			seen[strings.ToLower(normalized)] = struct{}{}
+			out = append(out, nodeSSHTarget{
+				ID:      "",
+				Name:    ref,
+				Address: ref,
+			})
+			continue
+		}
+
+		unresolved = append(unresolved, gin.H{"ref": ref, "error": "node not found"})
+	}
+
+	return out, unresolved
+}
+
+func (s *Server) handleNodeSSHExec(c *gin.Context) {
+	if s.nodeSSH == nil || !s.nodeSSH.Enabled() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "node ssh is disabled"})
+		return
+	}
+
+	var req struct {
+		Nodes          []string `json:"nodes"`
+		Command        string   `json:"command"`
+		TimeoutSeconds int      `json:"timeout_seconds"`
+		ExecID         string   `json:"exec_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	command := strings.TrimSpace(req.Command)
+	if command == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "command is required"})
+		return
+	}
+	if len(command) > 4000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "command is too long"})
+		return
+	}
+	if len(req.Nodes) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one node is required"})
+		return
+	}
+	execID := strings.TrimSpace(req.ExecID)
+	if execID == "" {
+		tokenRaw := make([]byte, 12)
+		if _, err := rand.Read(tokenRaw); err == nil {
+			execID = hex.EncodeToString(tokenRaw)
+		}
+	}
+	if execID == "" {
+		execID = strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+
+	targets, unresolved := s.resolveNodeSSHTargets(req.Nodes)
+	if len(targets) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":      "no resolvable nodes with ssh address",
+			"unresolved": unresolved,
+		})
+		return
+	}
+
+	timeout := s.cfg.NodeSSHCommandTimeout
+	if req.TimeoutSeconds > 0 {
+		timeout = time.Duration(req.TimeoutSeconds) * time.Second
+	}
+	if timeout <= 0 {
+		timeout = 45 * time.Second
+	}
+	if timeout > 10*time.Minute {
+		timeout = 10 * time.Minute
+	}
+
+	maxParallel := s.cfg.NodeSSHMaxParallel
+	if maxParallel <= 0 {
+		maxParallel = 5
+	}
+
+	type nodeResult struct {
+		NodeID     string `json:"node_id,omitempty"`
+		NodeName   string `json:"node_name"`
+		Address    string `json:"address"`
+		Normalized string `json:"normalized_address"`
+		OK         bool   `json:"ok"`
+		ExitCode   int    `json:"exit_code"`
+		DurationMS int64  `json:"duration_ms"`
+		Stdout     string `json:"stdout,omitempty"`
+		Stderr     string `json:"stderr,omitempty"`
+		Error      string `json:"error,omitempty"`
+	}
+
+	results := make([]nodeResult, len(targets))
+	sem := make(chan struct{}, maxParallel)
+	var wg sync.WaitGroup
+
+	for i, target := range targets {
+		i := i
+		target := target
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			nodeKey := strings.TrimSpace(target.ID)
+			if nodeKey == "" {
+				nodeKey = strings.TrimSpace(target.Name)
+			}
+			if nodeKey == "" {
+				nodeKey = strings.TrimSpace(target.Address)
+			}
+
+			s.wsHub.BroadcastJSON(gin.H{
+				"type":      "node_ssh_stream",
+				"exec_id":   execID,
+				"node_key":  nodeKey,
+				"node_id":   target.ID,
+				"node_name": target.Name,
+				"stream":    "system",
+				"line":      "starting command...",
+				"ts":        time.Now().UTC().Format(time.RFC3339Nano),
+			})
+
+			var execRes nodessh.ExecResult
+			// Ищем per-node credentials (по ID, потом по имени).
+			credKey := target.ID
+			if credKey == "" {
+				credKey = target.Name
+			}
+			creds, hasCreds, _ := s.storage.GetNodeSSHCreds(c.Request.Context(), credKey)
+			streamCb := func(chunk nodessh.StreamChunk) {
+				s.wsHub.BroadcastJSON(gin.H{
+					"type":      "node_ssh_stream",
+					"exec_id":   execID,
+					"node_key":  nodeKey,
+					"node_id":   target.ID,
+					"node_name": target.Name,
+					"stream":    chunk.Stream,
+					"line":      chunk.Line,
+					"ts":        time.Now().UTC().Format(time.RFC3339Nano),
+				})
+			}
+			if hasCreds && strings.TrimSpace(creds.User) != "" {
+				if strings.TrimSpace(creds.Password) != "" || strings.TrimSpace(creds.PrivateKey) != "" {
+					execRes = s.nodeSSH.ExecuteWithCredentialsAndPrivateKeyStreaming(
+						c.Request.Context(),
+						target.Address,
+						command,
+						creds.User,
+						creds.Password,
+						creds.PrivateKey,
+						timeout,
+						streamCb,
+					)
+				} else {
+					// Per-node user without explicit auth data: reuse global auth methods.
+					execRes = s.nodeSSH.ExecuteWithUserStreaming(c.Request.Context(), target.Address, command, creds.User, timeout, streamCb)
+				}
+			} else {
+				execRes = s.nodeSSH.ExecuteStreaming(c.Request.Context(), target.Address, command, timeout, streamCb)
+			}
+
+			s.wsHub.BroadcastJSON(gin.H{
+				"type":        "node_ssh_stream_done",
+				"exec_id":     execID,
+				"node_key":    nodeKey,
+				"node_id":     target.ID,
+				"node_name":   target.Name,
+				"ok":          execRes.Error == "" && execRes.ExitCode == 0,
+				"exit_code":   execRes.ExitCode,
+				"duration_ms": execRes.Duration.Milliseconds(),
+				"error":       execRes.Error,
+				"ts":          time.Now().UTC().Format(time.RFC3339Nano),
+			})
+
+			results[i] = nodeResult{
+				NodeID:     target.ID,
+				NodeName:   target.Name,
+				Address:    target.Address,
+				Normalized: s.nodeSSH.NormalizeAddress(target.Address),
+				OK:         execRes.Error == "" && execRes.ExitCode == 0,
+				ExitCode:   execRes.ExitCode,
+				DurationMS: execRes.Duration.Milliseconds(),
+				Stdout:     execRes.Stdout,
+				Stderr:     execRes.Stderr,
+				Error:      execRes.Error,
+			}
+		}()
+	}
+	wg.Wait()
+
+	success := 0
+	failed := 0
+	for _, r := range results {
+		if r.OK {
+			success++
+		} else {
+			failed++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"exec_id":         execID,
+		"command":         command,
+		"timeout_seconds": int(timeout.Seconds()),
+		"max_parallel":    maxParallel,
+		"results":         results,
+		"resolved_count":  len(results),
+		"success_count":   success,
+		"failed_count":    failed,
+		"unresolved":      unresolved,
+	})
+}
+
+// handleNodeSSHListCreds возвращает список нод с сохранёнными SSH-учётными данными (без паролей).
+func (s *Server) handleNodeSSHListCreds(c *gin.Context) {
+	all, err := s.storage.ListNodeSSHCreds(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	items := make([]gin.H, 0, len(all))
+	for key, creds := range all {
+		items = append(items, gin.H{
+			"node_key":        key,
+			"user":            creds.User,
+			"has_password":    creds.Password != "",
+			"has_private_key": strings.TrimSpace(creds.PrivateKey) != "",
+		})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		return strings.ToLower(items[i]["node_key"].(string)) < strings.ToLower(items[j]["node_key"].(string))
+	})
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+// handleNodeSSHSaveCreds сохраняет SSH-учётные данные для ноды.
+func (s *Server) handleNodeSSHSaveCreds(c *gin.Context) {
+	var req struct {
+		NodeKey    string `json:"node_key"`
+		User       string `json:"user"`
+		Password   string `json:"password"`
+		PrivateKey string `json:"private_key"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	req.NodeKey = strings.TrimSpace(req.NodeKey)
+	req.User = strings.TrimSpace(req.User)
+	req.PrivateKey = strings.TrimSpace(req.PrivateKey)
+	if req.NodeKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node_key is required"})
+		return
+	}
+	if req.User == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is required"})
+		return
+	}
+
+	existing, found, _ := s.storage.GetNodeSSHCreds(c.Request.Context(), req.NodeKey)
+	creds := storage.NodeSSHCreds{
+		User:       req.User,
+		Password:   req.Password,
+		PrivateKey: req.PrivateKey,
+	}
+	// For updates, empty fields mean "keep existing".
+	if found {
+		if creds.Password == "" {
+			creds.Password = existing.Password
+		}
+		if creds.PrivateKey == "" {
+			creds.PrivateKey = existing.PrivateKey
+		}
+	}
+
+	if err := s.storage.SetNodeSSHCreds(c.Request.Context(), req.NodeKey, creds); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// handleNodeSSHDeleteCreds удаляет SSH-учётные данные ноды.
+func (s *Server) handleNodeSSHDeleteCreds(c *gin.Context) {
+	var req struct {
+		NodeKey string `json:"node_key"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	req.NodeKey = strings.TrimSpace(req.NodeKey)
+	if req.NodeKey == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node_key is required"})
+		return
+	}
+	if err := s.storage.DeleteNodeSSHCreds(c.Request.Context(), req.NodeKey); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 func (s *Server) handleInternalLogs(c *gin.Context) {
@@ -1946,6 +2749,47 @@ func normalizeNetworkType(raw string) string {
 	}
 }
 
+func normalizeTrafficStatus(raw string, online bool) string {
+	status := strings.ToLower(strings.TrimSpace(raw))
+	switch status {
+	case "":
+		if online {
+			return "online"
+		}
+		return "offline"
+	case "active", "enabled", "enable", "ok":
+		return "active"
+	case "inactive", "disabled", "suspended":
+		return "disabled"
+	case "expired":
+		return "expired"
+	case "online":
+		return "online"
+	case "offline":
+		return "offline"
+	default:
+		return status
+	}
+}
+
+func sortedSetValues(input map[string]struct{}) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(input))
+	for item := range input {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.ToLower(out[i]) < strings.ToLower(out[j])
+	})
+	return out
+}
+
 func topProviders(m map[string]int, limit int) []string {
 	if len(m) == 0 {
 		return nil
@@ -2044,8 +2888,95 @@ func maxTime(a, b time.Time) time.Time {
 	return b
 }
 
-// handleMetrics возвращает метрики в формате Prometheus text exposition.
-// Включается переменной окружения PROMETHEUS_ENABLED=true.
+func ptrInt(v int) *int { return &v }
+
+func ptrBool(v bool) *bool { return &v }
+
+func ptrString(v string) *string { return &v }
+
+func ptrStringSlice(v []string) *[]string {
+	out := cloneStringSlice(v)
+	return &out
+}
+
+func cloneStringSlice(src []string) []string {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]string, len(src))
+	copy(out, src)
+	return out
+}
+
+func newServerMetrics() *serverMetrics {
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+	)
+
+	makeGauge := func(name, help string) prometheus.Gauge {
+		g := prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: name,
+			Help: help,
+		})
+		reg.MustRegister(g)
+		return g
+	}
+
+	return &serverMetrics{
+		registry:           reg,
+		handler:            promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
+		sharingViolators:   makeGauge("ffxban_sharing_violators", "Users currently in violator state"),
+		sharingBanlist:     makeGauge("ffxban_sharing_banlist", "Users currently in banlist"),
+		sharingPermanent:   makeGauge("ffxban_sharing_permanent", "Users with permanent ban"),
+		geoMismatches:      makeGauge("ffxban_geo_mismatches", "Users with geo sharing detected"),
+		activeBans:         makeGauge("ffxban_active_bans", "Currently confirmed active IP bans"),
+		nodesTotal:         makeGauge("ffxban_nodes_total", "Total number of configured nodes"),
+		nodesOnline:        makeGauge("ffxban_nodes_online", "Number of online nodes"),
+		logQueueLen:        makeGauge("ffxban_log_queue_length", "Current length of log processing queue"),
+		sideEffectQueueLen: makeGauge("ffxban_side_effect_queue_length", "Current length of side effect queue"),
+		activeSessions:     makeGauge("ffxban_active_sessions", "Current number of active user sessions"),
+		uptimeSeconds:      makeGauge("ffxban_uptime_seconds", "Process uptime in seconds"),
+	}
+}
+
+func (s *Server) collectNodeOnlineStats() (int, int) {
+	nodesTotal, nodesOnline := 0, 0
+	if s.limitProvider == nil {
+		return nodesTotal, nodesOnline
+	}
+	nodes := s.limitProvider.ListNodes()
+	nodesTotal = len(nodes)
+
+	runtimeStates := s.processor.GetNodeRuntimeStates()
+	now := time.Now()
+	timeout := s.cfg.NodeHeartbeatTimeout
+	for _, node := range nodes {
+		id := strings.TrimSpace(node.ID)
+		name := strings.TrimSpace(node.Name)
+		state, ok := runtimeStates[id]
+		if !ok {
+			state, ok = runtimeStates[name]
+		}
+		if !ok {
+			nameLower := strings.ToLower(name)
+			for key, runtimeState := range runtimeStates {
+				if strings.ToLower(key) == nameLower {
+					state = runtimeState
+					break
+				}
+			}
+		}
+		lastSeen := maxTime(state.LastTrafficAt, state.LastBlockerBeatAt)
+		if !lastSeen.IsZero() && lastSeen.After(now.Add(-timeout)) {
+			nodesOnline++
+		}
+	}
+	return nodesTotal, nodesOnline
+}
+
+// handleMetrics возвращает метрики в формате Prometheus exposition format.
 func (s *Server) handleMetrics(c *gin.Context) {
 	if !s.cfg.PrometheusEnabled {
 		c.JSON(http.StatusNotFound, gin.H{"error": "metrics endpoint is disabled; set PROMETHEUS_ENABLED=true"})
@@ -2069,57 +3000,27 @@ func (s *Server) handleMetrics(c *gin.Context) {
 		}
 	}
 
-	activeBans := s.processor.GetActiveBans(10000)
-
-	nodesTotal, nodesOnline := 0, 0
-	if s.limitProvider != nil {
-		nodes := s.limitProvider.ListNodes()
-		nodesTotal = len(nodes)
-		runtimeStates := s.processor.GetNodeRuntimeStates()
-		now := time.Now()
-		timeout := s.cfg.NodeHeartbeatTimeout
-		for _, node := range nodes {
-			id := strings.TrimSpace(node.ID)
-			name := strings.TrimSpace(node.Name)
-			state, ok := runtimeStates[id]
-			if !ok {
-				state, ok = runtimeStates[name]
-			}
-			if !ok {
-				nameLower := strings.ToLower(name)
-				for k, st := range runtimeStates {
-					if strings.ToLower(k) == nameLower {
-						state = st
-						break
-					}
-				}
-			}
-			lastSeen := maxTime(state.LastTrafficAt, state.LastBlockerBeatAt)
-			if !lastSeen.IsZero() && lastSeen.After(now.Add(-timeout)) {
-				nodesOnline++
-			}
-		}
-	}
-
+	nodesTotal, nodesOnline := s.collectNodeOnlineStats()
 	logQueue, sideEffectQueue := s.processor.GetQueueStats()
-
-	var sb strings.Builder
-	write := func(help, metricType, name string, value int) {
-		fmt.Fprintf(&sb, "# HELP %s %s\n# TYPE %s %s\n%s %d\n", name, help, name, metricType, name, value)
+	activeSessions := s.processor.CountActiveSessions(onlinePresenceWindow)
+	uptime := time.Since(s.startedAt).Seconds()
+	if uptime < 0 {
+		uptime = 0
 	}
 
-	write("Users currently in violator state", "gauge", "ffxban_sharing_violators", violators)
-	write("Users currently in banlist", "gauge", "ffxban_sharing_banlist", banlistUsers)
-	write("Users with permanent ban", "gauge", "ffxban_sharing_permanent", permanentBans)
-	write("Users with geo sharing detected (IPs from multiple countries)", "gauge", "ffxban_geo_mismatches", geoMismatches)
-	write("Currently confirmed active IP bans", "gauge", "ffxban_active_bans", len(activeBans))
-	write("Total number of configured nodes", "gauge", "ffxban_nodes_total", nodesTotal)
-	write("Number of online nodes (recent heartbeat or traffic)", "gauge", "ffxban_nodes_online", nodesOnline)
-	write("Current length of the log processing queue", "gauge", "ffxban_log_queue_length", logQueue)
-	write("Current length of the side effect task queue", "gauge", "ffxban_side_effect_queue_length", sideEffectQueue)
+	s.metrics.sharingViolators.Set(float64(violators))
+	s.metrics.sharingBanlist.Set(float64(banlistUsers))
+	s.metrics.sharingPermanent.Set(float64(permanentBans))
+	s.metrics.geoMismatches.Set(float64(geoMismatches))
+	s.metrics.activeBans.Set(float64(len(s.processor.GetActiveBans(10000))))
+	s.metrics.nodesTotal.Set(float64(nodesTotal))
+	s.metrics.nodesOnline.Set(float64(nodesOnline))
+	s.metrics.logQueueLen.Set(float64(logQueue))
+	s.metrics.sideEffectQueueLen.Set(float64(sideEffectQueue))
+	s.metrics.activeSessions.Set(float64(activeSessions))
+	s.metrics.uptimeSeconds.Set(uptime)
 
-	c.Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	c.String(http.StatusOK, sb.String())
+	s.metrics.handler.ServeHTTP(c.Writer, c.Request)
 }
 
 func (s *Server) handleResetSharing(c *gin.Context) {
@@ -2147,35 +3048,785 @@ func (s *Server) handleResetSharing(c *gin.Context) {
 }
 
 func (s *Server) handleConfig(c *gin.Context) {
+	c.JSON(http.StatusOK, s.configPayload())
+}
+
+func (s *Server) runtimeOverridesSnapshot() runtimeConfigOverrides {
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+	return s.configOverrides
+}
+
+func (s *Server) applyRuntimeOverrides(overrides runtimeConfigOverrides) {
+	s.configMu.Lock()
+	s.configOverrides = overrides
+	base := s.baseConfig
+
+	s.cfg.MaxIPsPerUser = base.MaxIPsPerUser
+	s.cfg.BlockDuration = base.BlockDuration
+	s.cfg.UserIPTTL = base.UserIPTTL
+	s.cfg.ClearIPsDelay = base.ClearIPsDelay
+	s.cfg.SharingDetectionEnabled = base.SharingDetectionEnabled
+	s.cfg.TriggerCount = base.TriggerCount
+	s.cfg.TriggerPeriod = base.TriggerPeriod
+	s.cfg.TriggerMinInterval = base.TriggerMinInterval
+	s.cfg.SharingSustain = base.SharingSustain
+	s.cfg.BanlistThreshold = base.BanlistThreshold
+	s.cfg.SharingSourceWindow = base.SharingSourceWindow
+	s.cfg.SubnetGrouping = base.SubnetGrouping
+	s.cfg.SharingBlockOnBanlistOnly = base.SharingBlockOnBanlistOnly
+	s.cfg.SharingBlockOnViolatorOnly = base.SharingBlockOnViolatorOnly
+	s.cfg.SharingHardwareGuardEnabled = base.SharingHardwareGuardEnabled
+	s.cfg.SharingPermanentBanEnabled = base.SharingPermanentBanEnabled
+	s.cfg.SharingPermanentBanDuration = base.SharingPermanentBanDuration
+	s.cfg.BanEscalationEnabled = base.BanEscalationEnabled
+	s.cfg.BanEscalationDurations = cloneStringSlice(base.BanEscalationDurations)
+	s.cfg.GeoSharingEnabled = base.GeoSharingEnabled
+	s.cfg.GeoSharingMinCountries = base.GeoSharingMinCountries
+	s.cfg.NetworkPolicyEnabled = base.NetworkPolicyEnabled
+	s.cfg.NetworkMobileGraceIPs = base.NetworkMobileGraceIPs
+	s.cfg.NetworkForceBlockExcessIPs = base.NetworkForceBlockExcessIPs
+	s.cfg.HeuristicsEnabled = base.HeuristicsEnabled
+	s.cfg.HeuristicsWindow = base.HeuristicsWindow
+	s.cfg.NodeHeartbeatTimeout = base.NodeHeartbeatTimeout
+	s.cfg.PrometheusEnabled = base.PrometheusEnabled
+
+	if overrides.MaxIPsPerUser != nil {
+		s.cfg.MaxIPsPerUser = *overrides.MaxIPsPerUser
+	}
+	if overrides.BlockDuration != nil {
+		s.cfg.BlockDuration = strings.TrimSpace(*overrides.BlockDuration)
+	}
+	if overrides.UserIPTTLSeconds != nil {
+		s.cfg.UserIPTTL = time.Duration(*overrides.UserIPTTLSeconds) * time.Second
+	}
+	if overrides.ClearIPsDelaySeconds != nil {
+		s.cfg.ClearIPsDelay = time.Duration(*overrides.ClearIPsDelaySeconds) * time.Second
+	}
+	if overrides.SharingDetectionEnabled != nil {
+		s.cfg.SharingDetectionEnabled = *overrides.SharingDetectionEnabled
+	}
+	if overrides.TriggerCount != nil {
+		s.cfg.TriggerCount = *overrides.TriggerCount
+	}
+	if overrides.TriggerPeriodSeconds != nil {
+		s.cfg.TriggerPeriod = time.Duration(*overrides.TriggerPeriodSeconds) * time.Second
+	}
+	if overrides.TriggerMinIntervalSeconds != nil {
+		s.cfg.TriggerMinInterval = time.Duration(*overrides.TriggerMinIntervalSeconds) * time.Second
+	}
+	if overrides.SharingSustainSeconds != nil {
+		s.cfg.SharingSustain = time.Duration(*overrides.SharingSustainSeconds) * time.Second
+	}
+	if overrides.BanlistThresholdSeconds != nil {
+		s.cfg.BanlistThreshold = time.Duration(*overrides.BanlistThresholdSeconds) * time.Second
+	}
+	if overrides.SharingSourceWindowSeconds != nil {
+		s.cfg.SharingSourceWindow = time.Duration(*overrides.SharingSourceWindowSeconds) * time.Second
+	}
+	if overrides.SubnetGrouping != nil {
+		s.cfg.SubnetGrouping = *overrides.SubnetGrouping
+	}
+	if overrides.SharingBlockOnBanlistOnly != nil {
+		s.cfg.SharingBlockOnBanlistOnly = *overrides.SharingBlockOnBanlistOnly
+	}
+	if overrides.SharingBlockOnViolatorOnly != nil {
+		s.cfg.SharingBlockOnViolatorOnly = *overrides.SharingBlockOnViolatorOnly
+	}
+	if overrides.SharingHardwareGuard != nil {
+		s.cfg.SharingHardwareGuardEnabled = *overrides.SharingHardwareGuard
+	}
+	if overrides.SharingPermanentBanEnabled != nil {
+		s.cfg.SharingPermanentBanEnabled = *overrides.SharingPermanentBanEnabled
+	}
+	if overrides.SharingPermanentBanDuration != nil {
+		s.cfg.SharingPermanentBanDuration = strings.TrimSpace(*overrides.SharingPermanentBanDuration)
+	}
+	if overrides.BanEscalationEnabled != nil {
+		s.cfg.BanEscalationEnabled = *overrides.BanEscalationEnabled
+	}
+	if overrides.BanEscalationDurations != nil {
+		s.cfg.BanEscalationDurations = cloneStringSlice(*overrides.BanEscalationDurations)
+	}
+	if overrides.GeoSharingEnabled != nil {
+		s.cfg.GeoSharingEnabled = *overrides.GeoSharingEnabled
+	}
+	if overrides.GeoSharingMinCountries != nil {
+		s.cfg.GeoSharingMinCountries = *overrides.GeoSharingMinCountries
+	}
+	if overrides.NetworkPolicyEnabled != nil {
+		s.cfg.NetworkPolicyEnabled = *overrides.NetworkPolicyEnabled
+	}
+	if overrides.NetworkMobileGraceIPs != nil {
+		s.cfg.NetworkMobileGraceIPs = *overrides.NetworkMobileGraceIPs
+	}
+	if overrides.NetworkForceBlockExcessIPs != nil {
+		s.cfg.NetworkForceBlockExcessIPs = *overrides.NetworkForceBlockExcessIPs
+	}
+	if overrides.HeuristicsEnabled != nil {
+		s.cfg.HeuristicsEnabled = *overrides.HeuristicsEnabled
+	}
+	if overrides.HeuristicsWindowSeconds != nil {
+		s.cfg.HeuristicsWindow = time.Duration(*overrides.HeuristicsWindowSeconds) * time.Second
+	}
+	if overrides.NodeHeartbeatTimeoutSeconds != nil {
+		s.cfg.NodeHeartbeatTimeout = time.Duration(*overrides.NodeHeartbeatTimeoutSeconds) * time.Second
+	}
+	if overrides.PrometheusEnabled != nil {
+		s.cfg.PrometheusEnabled = *overrides.PrometheusEnabled
+	}
+	s.configMu.Unlock()
+
+	processorOverrides := processor.RuntimeOverrides{}
+	if overrides.MaxIPsPerUser != nil {
+		processorOverrides.MaxIPsPerUser = *overrides.MaxIPsPerUser
+	}
+	if overrides.BlockDuration != nil {
+		processorOverrides.BlockDuration = strings.TrimSpace(*overrides.BlockDuration)
+	}
+	if overrides.TriggerCount != nil {
+		processorOverrides.TriggerCount = *overrides.TriggerCount
+	}
+	s.processor.SetRuntimeOverrides(processorOverrides)
+}
+
+func (s *Server) runtimeOverridesMap(overrides runtimeConfigOverrides) map[string]string {
+	out := map[string]string{}
+	putInt := func(key string, val *int) {
+		if val != nil {
+			out[key] = strconv.Itoa(*val)
+		}
+	}
+	putBool := func(key string, val *bool) {
+		if val != nil {
+			out[key] = strconv.FormatBool(*val)
+		}
+	}
+	putString := func(key string, val *string) {
+		if val != nil {
+			trimmed := strings.TrimSpace(*val)
+			if trimmed != "" {
+				out[key] = trimmed
+			}
+		}
+	}
+
+	putInt("max_ips_per_user", overrides.MaxIPsPerUser)
+	putString("block_duration", overrides.BlockDuration)
+	putInt("user_ip_ttl_seconds", overrides.UserIPTTLSeconds)
+	putInt("clear_ips_delay_seconds", overrides.ClearIPsDelaySeconds)
+	putBool("sharing_detection_enabled", overrides.SharingDetectionEnabled)
+	putInt("trigger_count", overrides.TriggerCount)
+	putInt("trigger_period_seconds", overrides.TriggerPeriodSeconds)
+	putInt("trigger_min_interval_seconds", overrides.TriggerMinIntervalSeconds)
+	putInt("sharing_sustain_seconds", overrides.SharingSustainSeconds)
+	putInt("banlist_threshold_seconds", overrides.BanlistThresholdSeconds)
+	putInt("sharing_source_window_seconds", overrides.SharingSourceWindowSeconds)
+	putBool("subnet_grouping", overrides.SubnetGrouping)
+	putBool("sharing_block_on_banlist_only", overrides.SharingBlockOnBanlistOnly)
+	putBool("sharing_block_on_violator_only", overrides.SharingBlockOnViolatorOnly)
+	putBool("sharing_hardware_guard", overrides.SharingHardwareGuard)
+	putBool("sharing_permanent_ban_enabled", overrides.SharingPermanentBanEnabled)
+	putString("sharing_permanent_ban_duration", overrides.SharingPermanentBanDuration)
+	putBool("ban_escalation_enabled", overrides.BanEscalationEnabled)
+	if overrides.BanEscalationDurations != nil {
+		if data, err := json.Marshal(*overrides.BanEscalationDurations); err == nil {
+			out["ban_escalation_durations"] = string(data)
+		}
+	}
+	putBool("geo_sharing_enabled", overrides.GeoSharingEnabled)
+	putInt("geo_sharing_min_countries", overrides.GeoSharingMinCountries)
+	putBool("network_policy_enabled", overrides.NetworkPolicyEnabled)
+	putInt("network_mobile_grace_ips", overrides.NetworkMobileGraceIPs)
+	putInt("network_force_block_excess_ips", overrides.NetworkForceBlockExcessIPs)
+	putBool("heuristics_enabled", overrides.HeuristicsEnabled)
+	putInt("heuristics_window_seconds", overrides.HeuristicsWindowSeconds)
+	putInt("node_heartbeat_timeout_seconds", overrides.NodeHeartbeatTimeoutSeconds)
+	putBool("prometheus_enabled", overrides.PrometheusEnabled)
+	return out
+}
+
+func (s *Server) runtimeOverridesJSON(overrides runtimeConfigOverrides) gin.H {
+	out := gin.H{}
+	putInt := func(key string, val *int) {
+		if val != nil {
+			out[key] = *val
+		}
+	}
+	putBool := func(key string, val *bool) {
+		if val != nil {
+			out[key] = *val
+		}
+	}
+	putString := func(key string, val *string) {
+		if val != nil {
+			out[key] = strings.TrimSpace(*val)
+		}
+	}
+
+	putInt("max_ips_per_user", overrides.MaxIPsPerUser)
+	putString("block_duration", overrides.BlockDuration)
+	putInt("user_ip_ttl_seconds", overrides.UserIPTTLSeconds)
+	putInt("clear_ips_delay_seconds", overrides.ClearIPsDelaySeconds)
+	putBool("sharing_detection_enabled", overrides.SharingDetectionEnabled)
+	putInt("trigger_count", overrides.TriggerCount)
+	putInt("trigger_period_seconds", overrides.TriggerPeriodSeconds)
+	putInt("trigger_min_interval_seconds", overrides.TriggerMinIntervalSeconds)
+	putInt("sharing_sustain_seconds", overrides.SharingSustainSeconds)
+	putInt("banlist_threshold_seconds", overrides.BanlistThresholdSeconds)
+	putInt("sharing_source_window_seconds", overrides.SharingSourceWindowSeconds)
+	putBool("subnet_grouping", overrides.SubnetGrouping)
+	putBool("sharing_block_on_banlist_only", overrides.SharingBlockOnBanlistOnly)
+	putBool("sharing_block_on_violator_only", overrides.SharingBlockOnViolatorOnly)
+	putBool("sharing_hardware_guard", overrides.SharingHardwareGuard)
+	putBool("sharing_permanent_ban_enabled", overrides.SharingPermanentBanEnabled)
+	putString("sharing_permanent_ban_duration", overrides.SharingPermanentBanDuration)
+	putBool("ban_escalation_enabled", overrides.BanEscalationEnabled)
+	if overrides.BanEscalationDurations != nil {
+		out["ban_escalation_durations"] = cloneStringSlice(*overrides.BanEscalationDurations)
+	}
+	putBool("geo_sharing_enabled", overrides.GeoSharingEnabled)
+	putInt("geo_sharing_min_countries", overrides.GeoSharingMinCountries)
+	putBool("network_policy_enabled", overrides.NetworkPolicyEnabled)
+	putInt("network_mobile_grace_ips", overrides.NetworkMobileGraceIPs)
+	putInt("network_force_block_excess_ips", overrides.NetworkForceBlockExcessIPs)
+	putBool("heuristics_enabled", overrides.HeuristicsEnabled)
+	putInt("heuristics_window_seconds", overrides.HeuristicsWindowSeconds)
+	putInt("node_heartbeat_timeout_seconds", overrides.NodeHeartbeatTimeoutSeconds)
+	putBool("prometheus_enabled", overrides.PrometheusEnabled)
+	return out
+}
+
+func parseRuntimeOverrides(raw map[string]string) runtimeConfigOverrides {
+	var overrides runtimeConfigOverrides
+	if len(raw) == 0 {
+		return overrides
+	}
+
+	parseInt := func(key string, min int) *int {
+		value := strings.TrimSpace(raw[key])
+		if value == "" {
+			return nil
+		}
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < min {
+			return nil
+		}
+		return ptrInt(parsed)
+	}
+	parseBool := func(key string) *bool {
+		value := strings.TrimSpace(raw[key])
+		if value == "" {
+			return nil
+		}
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			return nil
+		}
+		return ptrBool(parsed)
+	}
+	parseString := func(key string, pattern *regexp.Regexp) *string {
+		value := strings.TrimSpace(raw[key])
+		if value == "" {
+			return nil
+		}
+		if pattern != nil && !pattern.MatchString(value) {
+			return nil
+		}
+		return ptrString(value)
+	}
+
+	overrides.MaxIPsPerUser = parseInt("max_ips_per_user", 1)
+	overrides.BlockDuration = parseString("block_duration", durationPattern)
+	overrides.UserIPTTLSeconds = parseInt("user_ip_ttl_seconds", 1)
+	overrides.ClearIPsDelaySeconds = parseInt("clear_ips_delay_seconds", 1)
+	overrides.SharingDetectionEnabled = parseBool("sharing_detection_enabled")
+	overrides.TriggerCount = parseInt("trigger_count", 1)
+	overrides.TriggerPeriodSeconds = parseInt("trigger_period_seconds", 1)
+	overrides.TriggerMinIntervalSeconds = parseInt("trigger_min_interval_seconds", 1)
+	overrides.SharingSustainSeconds = parseInt("sharing_sustain_seconds", 1)
+	overrides.BanlistThresholdSeconds = parseInt("banlist_threshold_seconds", 1)
+	overrides.SharingSourceWindowSeconds = parseInt("sharing_source_window_seconds", 1)
+	overrides.SubnetGrouping = parseBool("subnet_grouping")
+	overrides.SharingBlockOnBanlistOnly = parseBool("sharing_block_on_banlist_only")
+	overrides.SharingBlockOnViolatorOnly = parseBool("sharing_block_on_violator_only")
+	overrides.SharingHardwareGuard = parseBool("sharing_hardware_guard")
+	overrides.SharingPermanentBanEnabled = parseBool("sharing_permanent_ban_enabled")
+	overrides.SharingPermanentBanDuration = parseString("sharing_permanent_ban_duration", durationPattern)
+	overrides.BanEscalationEnabled = parseBool("ban_escalation_enabled")
+	overrides.GeoSharingEnabled = parseBool("geo_sharing_enabled")
+	overrides.GeoSharingMinCountries = parseInt("geo_sharing_min_countries", 1)
+	overrides.NetworkPolicyEnabled = parseBool("network_policy_enabled")
+	overrides.NetworkMobileGraceIPs = parseInt("network_mobile_grace_ips", 0)
+	overrides.NetworkForceBlockExcessIPs = parseInt("network_force_block_excess_ips", 0)
+	overrides.HeuristicsEnabled = parseBool("heuristics_enabled")
+	overrides.HeuristicsWindowSeconds = parseInt("heuristics_window_seconds", 1)
+	overrides.NodeHeartbeatTimeoutSeconds = parseInt("node_heartbeat_timeout_seconds", 1)
+	overrides.PrometheusEnabled = parseBool("prometheus_enabled")
+
+	if rawDurations := strings.TrimSpace(raw["ban_escalation_durations"]); rawDurations != "" {
+		var items []string
+		if strings.HasPrefix(rawDurations, "[") {
+			_ = json.Unmarshal([]byte(rawDurations), &items)
+		}
+		if len(items) == 0 {
+			for _, part := range strings.Split(rawDurations, ",") {
+				item := strings.TrimSpace(part)
+				if item == "" {
+					continue
+				}
+				items = append(items, item)
+			}
+		}
+		valid := make([]string, 0, len(items))
+		for _, item := range items {
+			item = strings.TrimSpace(item)
+			if item == "" || !durationPattern.MatchString(item) {
+				continue
+			}
+			valid = append(valid, item)
+		}
+		if len(valid) > 0 {
+			overrides.BanEscalationDurations = ptrStringSlice(valid)
+		}
+	}
+	return overrides
+}
+
+func (s *Server) loadRuntimeConfigOverrides() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	raw, err := s.storage.GetConfigOverrides(ctx)
+	if err != nil {
+		return err
+	}
+	overrides := parseRuntimeOverrides(raw)
+	s.applyRuntimeOverrides(overrides)
+	return nil
+}
+
+func (s *Server) configPayload() gin.H {
+	s.configMu.RLock()
+	cfg := *s.cfg
+	cfg.BanEscalationDurations = cloneStringSlice(s.cfg.BanEscalationDurations)
+	overrides := s.configOverrides
+	s.configMu.RUnlock()
+
+	return gin.H{
+		"max_ips_per_user":               cfg.MaxIPsPerUser,
+		"block_duration":                 cfg.BlockDuration,
+		"user_ip_ttl_seconds":            int(cfg.UserIPTTL.Seconds()),
+		"clear_ips_delay_seconds":        int(cfg.ClearIPsDelay.Seconds()),
+		"sharing_detection_enabled":      cfg.SharingDetectionEnabled,
+		"trigger_count":                  cfg.TriggerCount,
+		"trigger_period_seconds":         int(cfg.TriggerPeriod.Seconds()),
+		"trigger_min_interval_seconds":   int(cfg.TriggerMinInterval.Seconds()),
+		"sharing_sustain_seconds":        int(cfg.SharingSustain.Seconds()),
+		"banlist_threshold_seconds":      int(cfg.BanlistThreshold.Seconds()),
+		"sharing_source_window_seconds":  int(cfg.SharingSourceWindow.Seconds()),
+		"subnet_grouping":                cfg.SubnetGrouping,
+		"sharing_block_on_banlist_only":  cfg.SharingBlockOnBanlistOnly,
+		"sharing_block_on_violator_only": cfg.SharingBlockOnViolatorOnly,
+		"sharing_hardware_guard":         cfg.SharingHardwareGuardEnabled,
+		"sharing_permanent_ban_enabled":  cfg.SharingPermanentBanEnabled,
+		"sharing_permanent_ban_duration": cfg.SharingPermanentBanDuration,
+		"ban_escalation_enabled":         cfg.BanEscalationEnabled,
+		"ban_escalation_durations":       cfg.BanEscalationDurations,
+		"geo_sharing_enabled":            cfg.GeoSharingEnabled,
+		"geo_sharing_min_countries":      cfg.GeoSharingMinCountries,
+		"network_policy_enabled":         cfg.NetworkPolicyEnabled,
+		"network_mobile_grace_ips":       cfg.NetworkMobileGraceIPs,
+		"network_force_block_excess_ips": cfg.NetworkForceBlockExcessIPs,
+		"heuristics_enabled":             cfg.HeuristicsEnabled,
+		"heuristics_window_seconds":      int(cfg.HeuristicsWindow.Seconds()),
+		"node_heartbeat_timeout_seconds": int(cfg.NodeHeartbeatTimeout.Seconds()),
+		"prometheus_enabled":             cfg.PrometheusEnabled,
+		"runtime_overrides":              s.runtimeOverridesJSON(overrides),
+	}
+}
+
+func intFromAny(value any) (int, error) {
+	switch v := value.(type) {
+	case int:
+		return v, nil
+	case int32:
+		return int(v), nil
+	case int64:
+		return int(v), nil
+	case float64:
+		return int(v), nil
+	case float32:
+		return int(v), nil
+	case string:
+		return strconv.Atoi(strings.TrimSpace(v))
+	default:
+		return 0, fmt.Errorf("expected integer")
+	}
+}
+
+func boolFromAny(value any) (bool, error) {
+	switch v := value.(type) {
+	case bool:
+		return v, nil
+	case string:
+		return strconv.ParseBool(strings.TrimSpace(v))
+	default:
+		return false, fmt.Errorf("expected boolean")
+	}
+}
+
+func stringSliceFromAny(value any) ([]string, error) {
+	switch v := value.(type) {
+	case []string:
+		return cloneStringSlice(v), nil
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			text := strings.TrimSpace(fmt.Sprintf("%v", item))
+			if text == "" {
+				continue
+			}
+			out = append(out, text)
+		}
+		return out, nil
+	case string:
+		raw := strings.TrimSpace(v)
+		if raw == "" {
+			return nil, nil
+		}
+		var decoded []string
+		if strings.HasPrefix(raw, "[") && json.Unmarshal([]byte(raw), &decoded) == nil {
+			return decoded, nil
+		}
+		parts := strings.Split(raw, ",")
+		out := make([]string, 0, len(parts))
+		for _, part := range parts {
+			text := strings.TrimSpace(part)
+			if text == "" {
+				continue
+			}
+			out = append(out, text)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected string array")
+	}
+}
+
+func validateDurationList(items []string) ([]string, error) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		if !durationPattern.MatchString(value) {
+			return nil, fmt.Errorf("invalid duration %q", value)
+		}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
+func (s *Server) handleConfigOverridesUpdate(c *gin.Context) {
+	var payload map[string]any
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	if nested, ok := payload["overrides"].(map[string]any); ok {
+		payload = nested
+	}
+
+	overrides := s.runtimeOverridesSnapshot()
+	setInt := func(value any, key string, min, max int) (*int, error) {
+		if value == nil {
+			return nil, nil
+		}
+		parsed, err := intFromAny(value)
+		if err != nil {
+			return nil, fmt.Errorf("%s must be an integer", key)
+		}
+		if parsed < min || (max > 0 && parsed > max) {
+			if max > 0 {
+				return nil, fmt.Errorf("%s must be between %d and %d", key, min, max)
+			}
+			return nil, fmt.Errorf("%s must be >= %d", key, min)
+		}
+		return ptrInt(parsed), nil
+	}
+	setBool := func(value any, key string) (*bool, error) {
+		if value == nil {
+			return nil, nil
+		}
+		parsed, err := boolFromAny(value)
+		if err != nil {
+			return nil, fmt.Errorf("%s must be boolean", key)
+		}
+		return ptrBool(parsed), nil
+	}
+	setDurationString := func(value any, key string) (*string, error) {
+		if value == nil {
+			return nil, nil
+		}
+		text := strings.TrimSpace(fmt.Sprintf("%v", value))
+		if text == "" {
+			return nil, nil
+		}
+		if !durationPattern.MatchString(text) {
+			return nil, fmt.Errorf("%s has invalid duration format", key)
+		}
+		return ptrString(text), nil
+	}
+
+	for key, value := range payload {
+		switch key {
+		case "max_ips_per_user":
+			v, err := setInt(value, key, 1, 100)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.MaxIPsPerUser = v
+		case "block_duration":
+			v, err := setDurationString(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.BlockDuration = v
+		case "user_ip_ttl_seconds":
+			v, err := setInt(value, key, 1, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.UserIPTTLSeconds = v
+		case "clear_ips_delay_seconds":
+			v, err := setInt(value, key, 1, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.ClearIPsDelaySeconds = v
+		case "sharing_detection_enabled":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.SharingDetectionEnabled = v
+		case "trigger_count":
+			v, err := setInt(value, key, 1, 100)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.TriggerCount = v
+		case "trigger_period_seconds":
+			v, err := setInt(value, key, 1, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.TriggerPeriodSeconds = v
+		case "trigger_min_interval_seconds":
+			v, err := setInt(value, key, 1, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.TriggerMinIntervalSeconds = v
+		case "sharing_sustain_seconds":
+			v, err := setInt(value, key, 1, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.SharingSustainSeconds = v
+		case "banlist_threshold_seconds":
+			v, err := setInt(value, key, 1, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.BanlistThresholdSeconds = v
+		case "sharing_source_window_seconds":
+			v, err := setInt(value, key, 1, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.SharingSourceWindowSeconds = v
+		case "subnet_grouping":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.SubnetGrouping = v
+		case "sharing_block_on_banlist_only":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.SharingBlockOnBanlistOnly = v
+		case "sharing_block_on_violator_only":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.SharingBlockOnViolatorOnly = v
+		case "sharing_hardware_guard":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.SharingHardwareGuard = v
+		case "sharing_permanent_ban_enabled":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.SharingPermanentBanEnabled = v
+		case "sharing_permanent_ban_duration":
+			v, err := setDurationString(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.SharingPermanentBanDuration = v
+		case "ban_escalation_enabled":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.BanEscalationEnabled = v
+		case "ban_escalation_durations":
+			if value == nil {
+				overrides.BanEscalationDurations = nil
+				continue
+			}
+			items, err := stringSliceFromAny(value)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "ban_escalation_durations must be string list"})
+				return
+			}
+			validated, err := validateDurationList(items)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if len(validated) == 0 {
+				overrides.BanEscalationDurations = nil
+			} else {
+				overrides.BanEscalationDurations = ptrStringSlice(validated)
+			}
+		case "geo_sharing_enabled":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.GeoSharingEnabled = v
+		case "geo_sharing_min_countries":
+			v, err := setInt(value, key, 1, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.GeoSharingMinCountries = v
+		case "network_policy_enabled":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.NetworkPolicyEnabled = v
+		case "network_mobile_grace_ips":
+			v, err := setInt(value, key, 0, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.NetworkMobileGraceIPs = v
+		case "network_force_block_excess_ips":
+			v, err := setInt(value, key, 0, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.NetworkForceBlockExcessIPs = v
+		case "heuristics_enabled":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.HeuristicsEnabled = v
+		case "heuristics_window_seconds":
+			v, err := setInt(value, key, 1, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.HeuristicsWindowSeconds = v
+		case "node_heartbeat_timeout_seconds":
+			v, err := setInt(value, key, 1, 0)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.NodeHeartbeatTimeoutSeconds = v
+		case "prometheus_enabled":
+			v, err := setBool(value, key)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			overrides.PrometheusEnabled = v
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.storage.SetConfigOverrides(ctx, s.runtimeOverridesMap(overrides)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	s.applyRuntimeOverrides(overrides)
+	s.wsHub.Notify()
 	c.JSON(http.StatusOK, gin.H{
-		"max_ips_per_user":               s.cfg.MaxIPsPerUser,
-		"block_duration":                 s.cfg.BlockDuration,
-		"user_ip_ttl_seconds":            int(s.cfg.UserIPTTL.Seconds()),
-		"clear_ips_delay_seconds":        int(s.cfg.ClearIPsDelay.Seconds()),
-		"sharing_detection_enabled":      s.cfg.SharingDetectionEnabled,
-		"trigger_count":                  s.cfg.TriggerCount,
-		"trigger_period_seconds":         int(s.cfg.TriggerPeriod.Seconds()),
-		"trigger_min_interval_seconds":   int(s.cfg.TriggerMinInterval.Seconds()),
-		"sharing_sustain_seconds":        int(s.cfg.SharingSustain.Seconds()),
-		"banlist_threshold_seconds":      int(s.cfg.BanlistThreshold.Seconds()),
-		"sharing_source_window_seconds":  int(s.cfg.SharingSourceWindow.Seconds()),
-		"subnet_grouping":                s.cfg.SubnetGrouping,
-		"sharing_block_on_banlist_only":  s.cfg.SharingBlockOnBanlistOnly,
-		"sharing_block_on_violator_only": s.cfg.SharingBlockOnViolatorOnly,
-		"sharing_hardware_guard":         s.cfg.SharingHardwareGuardEnabled,
-		"sharing_permanent_ban_enabled":  s.cfg.SharingPermanentBanEnabled,
-		"sharing_permanent_ban_duration": s.cfg.SharingPermanentBanDuration,
-		"ban_escalation_enabled":         s.cfg.BanEscalationEnabled,
-		"ban_escalation_durations":       s.cfg.BanEscalationDurations,
-		"geo_sharing_enabled":            s.cfg.GeoSharingEnabled,
-		"geo_sharing_min_countries":      s.cfg.GeoSharingMinCountries,
-		"network_policy_enabled":         s.cfg.NetworkPolicyEnabled,
-		"network_mobile_grace_ips":       s.cfg.NetworkMobileGraceIPs,
-		"network_force_block_excess_ips": s.cfg.NetworkForceBlockExcessIPs,
-		"heuristics_enabled":             s.cfg.HeuristicsEnabled,
-		"heuristics_window_seconds":      int(s.cfg.HeuristicsWindow.Seconds()),
-		"node_heartbeat_timeout_seconds": int(s.cfg.NodeHeartbeatTimeout.Seconds()),
-		"prometheus_enabled":             s.cfg.PrometheusEnabled,
+		"status": "ok",
+		"config": s.configPayload(),
+	})
+}
+
+func (s *Server) handleConfigOverridesReset(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.storage.SetConfigOverrides(ctx, nil); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	s.applyRuntimeOverrides(runtimeConfigOverrides{})
+	s.wsHub.Notify()
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+		"config": s.configPayload(),
 	})
 }
 
@@ -2224,16 +3875,16 @@ func (s *Server) handleSysInfo(c *gin.Context) {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 	goInfo := gin.H{
-		"goroutines":   runtime.NumGoroutine(),
-		"heap_alloc":   mem.HeapAlloc,
-		"heap_sys":     mem.HeapSys,
-		"heap_inuse":   mem.HeapInuse,
-		"stack_inuse":  mem.StackInuse,
-		"sys_total":    mem.Sys,
-		"gc_runs":      mem.NumGC,
-		"next_gc":      mem.NextGC,
-		"go_version":   runtime.Version(),
-		"num_cpu":      runtime.NumCPU(),
+		"goroutines":  runtime.NumGoroutine(),
+		"heap_alloc":  mem.HeapAlloc,
+		"heap_sys":    mem.HeapSys,
+		"heap_inuse":  mem.HeapInuse,
+		"stack_inuse": mem.StackInuse,
+		"sys_total":   mem.Sys,
+		"gc_runs":     mem.NumGC,
+		"next_gc":     mem.NextGC,
+		"go_version":  runtime.Version(),
+		"num_cpu":     runtime.NumCPU(),
 	}
 
 	// --- System RAM (/proc/meminfo) ---

@@ -21,8 +21,9 @@ import (
 	"ffxban/internal/services/publisher"
 	"ffxban/internal/services/status"
 	"ffxban/internal/services/storage"
-	"ffxban/internal/services/threexui"
 )
+
+var buildVersion = "1.0"
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -42,42 +43,22 @@ func main() {
 
 	rabbitPublisher, err := publisher.NewRabbitMQPublisher(cfg.RabbitMQURL, cfg.BlockingExchangeName)
 	if err != nil {
-		log.Printf("Warning: Failed to connect to RabbitMQ: %v", err)
-		// Don't fatal here if we might be in 3x-ui mode without RabbitMQ
-		// But for now, let's keep it robust. If RabbitMQ is critical for Remnawave, it should fail.
-		// If 3x-ui enabled, maybe we can survive without it?
-		if !cfg.ThreexuiEnabled {
-			log.Fatalf("Critical error: RabbitMQ required for Remnawave mode")
-		}
-	} else {
-		defer rabbitPublisher.Close()
+		log.Fatalf("Critical error: RabbitMQ connection failed: %v", err)
 	}
+	defer rabbitPublisher.Close()
 
 	var activeBlocker blocker.Blocker
 	var rabbitBlocker *blocker.RabbitMQBlocker
-	var threexuiManager *threexui.Manager
 
 	if rabbitPublisher != nil {
 		rabbitBlocker = blocker.NewRabbitMQBlocker(rabbitPublisher)
 	}
 
-	if cfg.ThreexuiEnabled {
-		threexuiManager = threexui.NewManager(cfg)
-		threexuiBlocker := blocker.NewThreexuiBlocker(threexuiManager)
-
-		if cfg.ThreexuiBlockMode == "api_and_nftables" && rabbitBlocker != nil {
-			activeBlocker = blocker.NewComboBlocker(rabbitBlocker, threexuiBlocker)
-		} else {
-			activeBlocker = threexuiBlocker
-		}
-		log.Printf("Enabled 3x-ui mode. Block mode: %s", cfg.ThreexuiBlockMode)
-	} else {
-		if rabbitBlocker == nil {
-			log.Fatalf("RabbitMQ connection failed and 3x-ui not enabled. Cannot proceed.")
-		}
-		activeBlocker = rabbitBlocker
-		log.Println("Enabled Remnawave/RabbitMQ mode.")
+	if rabbitBlocker == nil {
+		log.Fatalf("RabbitMQ blocker is not initialized")
 	}
+	activeBlocker = rabbitBlocker
+	log.Println("Enabled Remnawave/RabbitMQ mode.")
 
 	webhookAlerter := alerter.NewWebhookAlerter(
 		cfg.AlertWebhookURL,
@@ -97,7 +78,7 @@ func main() {
 	logProcessor := processor.NewLogProcessor(redisStore, activeBlocker, webhookAlerter, limitProvider, networkDetector, cfg)
 	poolMonitor := monitor.NewPoolMonitor(redisStore, limitProvider, cfg)
 	statusConsumer := status.NewConsumer(cfg.RabbitMQURL, cfg.BlockingStatusExchangeName, logProcessor.ApplyBlockerReport)
-	apiServer := api.NewServer(cfg, logProcessor, redisStore, activeBlocker, threexuiManager, limitProvider, networkDetector)
+	apiServer := api.NewServer(cfg, logProcessor, redisStore, activeBlocker, limitProvider, networkDetector, buildVersion)
 
 	backgroundWorkers := 4
 	if panelClient != nil {
@@ -118,7 +99,9 @@ func main() {
 		Handler:           apiServer.GetRouter(), // Получаем роутер из нашего api.Server
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
+		// SSH exec может формировать большой финальный JSON-ответ и занимать минуты.
+		// Короткий WriteTimeout приводит к обрыву ответа и HTTP 502 на nginx.
+		WriteTimeout:      12 * time.Minute,
 		IdleTimeout:       60 * time.Second,
 	}
 
@@ -143,6 +126,16 @@ func main() {
 		log.Printf("Ошибка при остановке HTTP-сервера: %v", err)
 	} else {
 		log.Println("HTTP-сервер успешно остановлен.")
+	}
+
+	log.Println("Ожидание опустошения очередей процессора...")
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), 8*time.Second)
+	drained := logProcessor.WaitDrained(drainCtx, 600*time.Millisecond)
+	drainCancel()
+	if drained {
+		log.Println("Очереди процессора успешно опустошены.")
+	} else {
+		log.Println("Таймаут ожидания опустошения очередей. Продолжаю остановку.")
 	}
 
 	cancel()

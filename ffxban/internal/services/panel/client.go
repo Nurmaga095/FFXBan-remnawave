@@ -36,11 +36,26 @@ type HWIDDeviceProfile struct {
 
 // UserProfile содержит метаданные пользователя из панели.
 type UserProfile struct {
-	Username          string              `json:"username,omitempty"`
-	LastConnectedNode string              `json:"last_connected_node,omitempty"`
-	TelegramID        string              `json:"telegram_id,omitempty"`
-	Description       string              `json:"description,omitempty"`
-	HWIDDevices       []HWIDDeviceProfile `json:"hwid_devices,omitempty"`
+	UserIdentifier           string              `json:"user_identifier,omitempty"`
+	UUID                     string              `json:"uuid,omitempty"`
+	Email                    string              `json:"email,omitempty"`
+	Username                 string              `json:"username,omitempty"`
+	Status                   string              `json:"status,omitempty"`
+	Tag                      string              `json:"tag,omitempty"`
+	Tariff                   string              `json:"tariff,omitempty"`
+	LastConnectedNode        string              `json:"last_connected_node,omitempty"`
+	LastConnectedNodeID      string              `json:"last_connected_node_id,omitempty"`
+	TelegramID               string              `json:"telegram_id,omitempty"`
+	Description              string              `json:"description,omitempty"`
+	HWIDDeviceLimit          int                 `json:"hwid_device_limit,omitempty"`
+	TrafficLimitBytes        int64               `json:"traffic_limit_bytes,omitempty"`
+	UsedTrafficBytes         int64               `json:"used_traffic_bytes,omitempty"`
+	LifetimeUsedTrafficBytes int64               `json:"lifetime_used_traffic_bytes,omitempty"`
+	FirstConnectedAt         time.Time           `json:"first_connected_at,omitempty"`
+	OnlineAt                 time.Time           `json:"online_at,omitempty"`
+	ExpireAt                 time.Time           `json:"expire_at,omitempty"`
+	ActiveInternalSquadNames []string            `json:"active_internal_squad_names,omitempty"`
+	HWIDDevices              []HWIDDeviceProfile `json:"hwid_devices,omitempty"`
 }
 
 // NodeProfile содержит метаданные ноды из панели.
@@ -54,6 +69,7 @@ type NodeProfile struct {
 type UserLimitProvider interface {
 	GetUserLimit(userIdentifier string) (int, bool)
 	GetUserProfile(userIdentifier string) (UserProfile, bool)
+	ListUserProfiles() []UserProfile
 	GetNodeDisplayName(nodeIdentifier string) (string, bool)
 	ListNodes() []NodeProfile
 	Stats() Stats
@@ -71,6 +87,7 @@ type Client struct {
 	mu        sync.RWMutex
 	userLimit map[string]int
 	profiles  map[string]UserProfile
+	users     []UserProfile
 	nodeMap   map[string]string
 	nodes     []NodeProfile
 	stats     Stats
@@ -250,11 +267,24 @@ func (c *Client) ListNodes() []NodeProfile {
 	return out
 }
 
+// ListUserProfiles возвращает список профилей пользователей панели.
+func (c *Client) ListUserProfiles() []UserProfile {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if len(c.users) == 0 {
+		return nil
+	}
+	out := make([]UserProfile, len(c.users))
+	copy(out, c.users)
+	return out
+}
+
 func (c *Client) reload(ctx context.Context) {
 	c.reloadMu.Lock()
 	defer c.reloadMu.Unlock()
 
-	limits, profiles, userNodeAliases, limitsErr := c.fetchAllLimits(ctx)
+	limits, profiles, userNodeAliases, users, limitsErr := c.fetchAllLimits(ctx)
 	nodes, nodeAliases, nodeErr := c.fetchAllNodes(ctx)
 
 	c.mu.Lock()
@@ -263,8 +293,9 @@ func (c *Client) reload(ctx context.Context) {
 	if limitsErr == nil {
 		c.userLimit = limits
 		c.profiles = profiles
+		c.users = users
 		c.stats.Loaded = true
-		c.stats.Users = len(limits)
+		c.stats.Users = len(users)
 		c.stats.LastLoad = time.Now()
 	}
 
@@ -308,18 +339,20 @@ func (c *Client) reload(ctx context.Context) {
 	}
 }
 
-func (c *Client) fetchAllLimits(ctx context.Context) (map[string]int, map[string]UserProfile, map[string]string, error) {
+func (c *Client) fetchAllLimits(ctx context.Context) (map[string]int, map[string]UserProfile, map[string]string, []UserProfile, error) {
 	limits := make(map[string]int)
 	profiles := make(map[string]UserProfile)
 	nodeAliases := make(map[string]string)
 	userUUIDToKeys := make(map[string][]string)
+	panelUsersByKey := make(map[string]UserProfile)
+	userUUIDToPrimaryKey := make(map[string]string)
 	start := 0
 	size := panelUsersPageSize
 
 	for {
 		users, err := c.fetchUsersPage(ctx, start, size)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		if len(users) == 0 {
 			break
@@ -327,12 +360,15 @@ func (c *Client) fetchAllLimits(ctx context.Context) (map[string]int, map[string
 
 		for _, user := range users {
 			limit, hasLimit := extractUserLimit(user)
-			displayName := extractUserDisplayName(user)
-			lastNodeName, aliases := extractLastConnectedNode(user)
-			telegramID := extractUserTelegramID(user)
-			description := extractUserDescription(user)
+			profileFromUser := extractUserProfile(user)
+			lastNodeName := profileFromUser.LastConnectedNode
+			lastNodeID := profileFromUser.LastConnectedNodeID
+			aliases := extractLastConnectedNodeAliases(user, lastNodeID, lastNodeName)
 			userUUID := extractUserUUID(user)
 			keys := extractUserKeys(user)
+			if profileFromUser.HWIDDeviceLimit <= 0 && hasLimit && limit > 0 {
+				profileFromUser.HWIDDeviceLimit = limit
+			}
 			if userUUID != "" && len(keys) > 0 {
 				seen := make(map[string]struct{}, len(userUUIDToKeys[userUUID]))
 				for _, existing := range userUUIDToKeys[userUUID] {
@@ -349,27 +385,32 @@ func (c *Client) fetchAllLimits(ctx context.Context) (map[string]int, map[string
 					seen[key] = struct{}{}
 				}
 			}
+
+			primaryKey := normalizeUserID(profileFromUser.UserIdentifier)
+			if primaryKey == "" && len(keys) > 0 {
+				primaryKey = normalizeUserID(keys[0])
+			}
+			if primaryKey != "" {
+				merged := mergeUserProfile(panelUsersByKey[primaryKey], profileFromUser)
+				if merged.UserIdentifier == "" && len(keys) > 0 {
+					merged.UserIdentifier = strings.TrimSpace(keys[0])
+				}
+				panelUsersByKey[primaryKey] = merged
+				if userUUID != "" {
+					userUUIDToPrimaryKey[userUUID] = primaryKey
+				}
+			}
+
 			for _, key := range keys {
 				if key != "" {
 					if hasLimit && limit > 0 {
 						limits[key] = limit
 					}
-					profile := profiles[key]
-					if displayName != "" {
-						profile.Username = displayName
+					profile := mergeUserProfile(profiles[key], profileFromUser)
+					if profile.UserIdentifier == "" {
+						profile.UserIdentifier = strings.TrimSpace(key)
 					}
-					if lastNodeName != "" {
-						profile.LastConnectedNode = lastNodeName
-					}
-					if telegramID != "" {
-						profile.TelegramID = telegramID
-					}
-					if description != "" {
-						profile.Description = description
-					}
-					if profile.Username != "" || profile.LastConnectedNode != "" || profile.TelegramID != "" || profile.Description != "" {
-						profiles[key] = profile
-					}
+					profiles[key] = profile
 				}
 			}
 			if lastNodeName != "" {
@@ -402,10 +443,35 @@ func (c *Client) fetchAllLimits(ctx context.Context) (map[string]int, map[string
 				profile.HWIDDevices = devices
 				profiles[key] = profile
 			}
+
+			if primaryKey, ok := userUUIDToPrimaryKey[userUUID]; ok {
+				profile := panelUsersByKey[primaryKey]
+				profile.HWIDDevices = devices
+				panelUsersByKey[primaryKey] = profile
+			}
 		}
 	}
 
-	return limits, profiles, nodeAliases, nil
+	panelUsers := make([]UserProfile, 0, len(panelUsersByKey))
+	for _, profile := range panelUsersByKey {
+		panelUsers = append(panelUsers, profile)
+	}
+	sort.Slice(panelUsers, func(i, j int) bool {
+		left := strings.ToLower(strings.TrimSpace(panelUsers[i].Username))
+		right := strings.ToLower(strings.TrimSpace(panelUsers[j].Username))
+		if left == right {
+			return strings.ToLower(strings.TrimSpace(panelUsers[i].UserIdentifier)) < strings.ToLower(strings.TrimSpace(panelUsers[j].UserIdentifier))
+		}
+		if left == "" {
+			return false
+		}
+		if right == "" {
+			return true
+		}
+		return left < right
+	})
+
+	return limits, profiles, nodeAliases, panelUsers, nil
 }
 
 func (c *Client) fetchUsersPage(ctx context.Context, start, size int) ([]map[string]any, error) {
@@ -691,7 +757,7 @@ func (c *Client) fetchAllNodes(ctx context.Context) ([]NodeProfile, map[string]s
 }
 
 func extractUserLimit(user map[string]any) (int, bool) {
-	for _, key := range []string{"hwidDeviceLimit", "ipLimit", "limit"} {
+	for _, key := range []string{"hwidDeviceLimit", "hwid_device_limit", "ipLimit", "ip_limit", "limit"} {
 		raw, ok := user[key]
 		if !ok {
 			continue
@@ -702,6 +768,453 @@ func extractUserLimit(user map[string]any) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+func extractUserProfile(user map[string]any) UserProfile {
+	userIdentifier := extractUserPrimaryIdentifier(user)
+	email := extractUserEmail(user)
+	username := extractUserDisplayName(user)
+	userUUID := extractUserUUID(user)
+	status := extractUserStatus(user)
+	tag := extractUserTag(user)
+	tariff, squads := extractUserTariff(user)
+	lastNodeName, lastNodeID, aliases := extractLastConnectedNodeInfo(user)
+	_ = aliases
+
+	trafficLimitBytes := extractUserTrafficLimitBytes(user)
+	usedTrafficBytes := extractUserTrafficUsedBytes(user)
+	lifetimeUsedTrafficBytes := extractUserTrafficLifetimeUsedBytes(user)
+	firstConnectedAt := extractUserTrafficFirstConnectedAt(user)
+	onlineAt := extractUserTrafficOnlineAt(user)
+	expireAt := extractUserExpireAt(user)
+
+	hwidLimit, _ := extractUserLimit(user)
+
+	profile := UserProfile{
+		UserIdentifier:           userIdentifier,
+		UUID:                     userUUID,
+		Email:                    email,
+		Username:                 username,
+		Status:                   status,
+		Tag:                      tag,
+		Tariff:                   tariff,
+		LastConnectedNode:        lastNodeName,
+		LastConnectedNodeID:      lastNodeID,
+		TelegramID:               extractUserTelegramID(user),
+		Description:              extractUserDescription(user),
+		HWIDDeviceLimit:          hwidLimit,
+		TrafficLimitBytes:        trafficLimitBytes,
+		UsedTrafficBytes:         usedTrafficBytes,
+		LifetimeUsedTrafficBytes: lifetimeUsedTrafficBytes,
+		FirstConnectedAt:         firstConnectedAt,
+		OnlineAt:                 onlineAt,
+		ExpireAt:                 expireAt,
+		ActiveInternalSquadNames: squads,
+	}
+
+	if profile.Email == "" && strings.Contains(profile.UserIdentifier, "@") {
+		profile.Email = profile.UserIdentifier
+	}
+	if profile.UserIdentifier == "" {
+		if profile.Email != "" {
+			profile.UserIdentifier = profile.Email
+		} else if profile.Username != "" {
+			profile.UserIdentifier = profile.Username
+		} else if profile.UUID != "" {
+			profile.UserIdentifier = profile.UUID
+		}
+	}
+
+	return profile
+}
+
+func mergeUserProfile(dst, src UserProfile) UserProfile {
+	if strings.TrimSpace(src.UserIdentifier) != "" {
+		dst.UserIdentifier = strings.TrimSpace(src.UserIdentifier)
+	}
+	if strings.TrimSpace(src.UUID) != "" {
+		dst.UUID = strings.TrimSpace(src.UUID)
+	}
+	if strings.TrimSpace(src.Email) != "" {
+		dst.Email = strings.TrimSpace(src.Email)
+	}
+	if strings.TrimSpace(src.Username) != "" {
+		dst.Username = strings.TrimSpace(src.Username)
+	}
+	if strings.TrimSpace(src.Status) != "" {
+		dst.Status = strings.TrimSpace(src.Status)
+	}
+	if strings.TrimSpace(src.Tag) != "" {
+		dst.Tag = strings.TrimSpace(src.Tag)
+	}
+	if strings.TrimSpace(src.Tariff) != "" {
+		dst.Tariff = strings.TrimSpace(src.Tariff)
+	}
+	if strings.TrimSpace(src.LastConnectedNode) != "" {
+		dst.LastConnectedNode = strings.TrimSpace(src.LastConnectedNode)
+	}
+	if strings.TrimSpace(src.LastConnectedNodeID) != "" {
+		dst.LastConnectedNodeID = strings.TrimSpace(src.LastConnectedNodeID)
+	}
+	if strings.TrimSpace(src.TelegramID) != "" {
+		dst.TelegramID = strings.TrimSpace(src.TelegramID)
+	}
+	if strings.TrimSpace(src.Description) != "" {
+		dst.Description = strings.TrimSpace(src.Description)
+	}
+	if src.HWIDDeviceLimit > 0 || dst.HWIDDeviceLimit == 0 {
+		dst.HWIDDeviceLimit = src.HWIDDeviceLimit
+	}
+	if src.TrafficLimitBytes > 0 || dst.TrafficLimitBytes == 0 {
+		dst.TrafficLimitBytes = src.TrafficLimitBytes
+	}
+	if src.UsedTrafficBytes > 0 || dst.UsedTrafficBytes == 0 {
+		dst.UsedTrafficBytes = src.UsedTrafficBytes
+	}
+	if src.LifetimeUsedTrafficBytes > 0 || dst.LifetimeUsedTrafficBytes == 0 {
+		dst.LifetimeUsedTrafficBytes = src.LifetimeUsedTrafficBytes
+	}
+	if !src.FirstConnectedAt.IsZero() {
+		dst.FirstConnectedAt = src.FirstConnectedAt
+	}
+	if !src.OnlineAt.IsZero() {
+		dst.OnlineAt = src.OnlineAt
+	}
+	if !src.ExpireAt.IsZero() {
+		dst.ExpireAt = src.ExpireAt
+	}
+	if len(src.ActiveInternalSquadNames) > 0 {
+		dst.ActiveInternalSquadNames = uniqueStrings(src.ActiveInternalSquadNames)
+	}
+	if len(src.HWIDDevices) > 0 {
+		dst.HWIDDevices = src.HWIDDevices
+	}
+	return dst
+}
+
+func extractUserPrimaryIdentifier(user map[string]any) string {
+	for _, key := range []string{"user_identifier", "email", "id", "username"} {
+		if str := extractTrimmedString(user, key); str != "" {
+			return str
+		}
+	}
+	return ""
+}
+
+func extractUserEmail(user map[string]any) string {
+	for _, key := range []string{"email", "user_identifier", "id"} {
+		if str := extractTrimmedString(user, key); str != "" && strings.Contains(str, "@") {
+			return str
+		}
+	}
+	return ""
+}
+
+func extractUserStatus(user map[string]any) string {
+	for _, key := range []string{"status", "state"} {
+		raw, ok := user[key]
+		if !ok || raw == nil {
+			continue
+		}
+		switch v := raw.(type) {
+		case bool:
+			if v {
+				return "active"
+			}
+			return "disabled"
+		default:
+			if str, ok := anyToString(raw); ok {
+				str = strings.TrimSpace(strings.ToLower(str))
+				if str != "" {
+					return str
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func extractUserTag(user map[string]any) string {
+	for _, key := range []string{"tag", "plan", "tariff"} {
+		if str := extractTrimmedString(user, key); str != "" {
+			return str
+		}
+	}
+	return ""
+}
+
+func extractUserTariff(user map[string]any) (string, []string) {
+	squads := extractUserActiveSquadNames(user)
+	if len(squads) > 0 {
+		return squads[0], squads
+	}
+	tag := extractUserTag(user)
+	if tag != "" {
+		return tag, nil
+	}
+	for _, key := range []string{"tariff", "plan"} {
+		if str := extractTrimmedString(user, key); str != "" {
+			return str, nil
+		}
+	}
+	return "", nil
+}
+
+func extractUserActiveSquadNames(user map[string]any) []string {
+	for _, key := range []string{"activeInternalSquads", "activeSquads", "internalSquads", "squads"} {
+		raw, ok := user[key]
+		if !ok || raw == nil {
+			continue
+		}
+		arr, ok := raw.([]any)
+		if !ok || len(arr) == 0 {
+			continue
+		}
+		out := make([]string, 0, len(arr))
+		for _, item := range arr {
+			switch v := item.(type) {
+			case string:
+				v = strings.TrimSpace(v)
+				if v != "" {
+					out = append(out, v)
+				}
+			case map[string]any:
+				for _, field := range []string{"name", "title", "label", "tag"} {
+					if str := extractTrimmedString(v, field); str != "" {
+						out = append(out, str)
+						break
+					}
+				}
+			}
+		}
+		out = uniqueStrings(out)
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return nil
+}
+
+func extractUserTrafficMap(user map[string]any) map[string]any {
+	for _, key := range []string{"userTraffic", "traffic", "usage"} {
+		raw, ok := user[key]
+		if !ok || raw == nil {
+			continue
+		}
+		if obj, ok := raw.(map[string]any); ok {
+			return obj
+		}
+	}
+	return nil
+}
+
+func extractUserTrafficLimitBytes(user map[string]any) int64 {
+	for _, key := range []string{"trafficLimitBytes", "traffic_limit_bytes", "trafficLimit"} {
+		raw, ok := user[key]
+		if !ok || raw == nil {
+			continue
+		}
+		if value, ok := anyToInt64(raw); ok {
+			return value
+		}
+	}
+	return 0
+}
+
+func extractUserTrafficUsedBytes(user map[string]any) int64 {
+	if traffic := extractUserTrafficMap(user); traffic != nil {
+		for _, key := range []string{"usedTrafficBytes", "used_traffic_bytes", "used"} {
+			raw, ok := traffic[key]
+			if !ok || raw == nil {
+				continue
+			}
+			if value, ok := anyToInt64(raw); ok {
+				return value
+			}
+		}
+	}
+	for _, key := range []string{"usedTrafficBytes", "used_traffic_bytes", "trafficUsedBytes"} {
+		raw, ok := user[key]
+		if !ok || raw == nil {
+			continue
+		}
+		if value, ok := anyToInt64(raw); ok {
+			return value
+		}
+	}
+	return 0
+}
+
+func extractUserTrafficLifetimeUsedBytes(user map[string]any) int64 {
+	if traffic := extractUserTrafficMap(user); traffic != nil {
+		for _, key := range []string{"lifetimeUsedTrafficBytes", "lifetime_used_traffic_bytes", "lifetimeUsed"} {
+			raw, ok := traffic[key]
+			if !ok || raw == nil {
+				continue
+			}
+			if value, ok := anyToInt64(raw); ok {
+				return value
+			}
+		}
+	}
+	for _, key := range []string{"lifetimeUsedTrafficBytes", "lifetime_used_traffic_bytes"} {
+		raw, ok := user[key]
+		if !ok || raw == nil {
+			continue
+		}
+		if value, ok := anyToInt64(raw); ok {
+			return value
+		}
+	}
+	return 0
+}
+
+func extractUserTrafficFirstConnectedAt(user map[string]any) time.Time {
+	if traffic := extractUserTrafficMap(user); traffic != nil {
+		for _, key := range []string{"firstConnectedAt", "first_connected_at"} {
+			raw, ok := traffic[key]
+			if !ok || raw == nil {
+				continue
+			}
+			if value, ok := anyToTime(raw); ok {
+				return value
+			}
+		}
+	}
+	for _, key := range []string{"firstConnectedAt", "first_connected_at"} {
+		raw, ok := user[key]
+		if !ok || raw == nil {
+			continue
+		}
+		if value, ok := anyToTime(raw); ok {
+			return value
+		}
+	}
+	return time.Time{}
+}
+
+func extractUserTrafficOnlineAt(user map[string]any) time.Time {
+	if traffic := extractUserTrafficMap(user); traffic != nil {
+		for _, key := range []string{"onlineAt", "online_at"} {
+			raw, ok := traffic[key]
+			if !ok || raw == nil {
+				continue
+			}
+			if value, ok := anyToTime(raw); ok {
+				return value
+			}
+		}
+	}
+	for _, key := range []string{"onlineAt", "online_at", "lastSeenAt", "last_seen_at"} {
+		raw, ok := user[key]
+		if !ok || raw == nil {
+			continue
+		}
+		if value, ok := anyToTime(raw); ok {
+			return value
+		}
+	}
+	return time.Time{}
+}
+
+func extractUserExpireAt(user map[string]any) time.Time {
+	for _, key := range []string{"expireAt", "expire_at", "expiresAt", "expires_at"} {
+		raw, ok := user[key]
+		if !ok || raw == nil {
+			continue
+		}
+		if value, ok := anyToTime(raw); ok {
+			return value
+		}
+	}
+	return time.Time{}
+}
+
+func extractLastConnectedNodeInfo(user map[string]any) (string, string, []string) {
+	for _, key := range []string{"lastConnectedNode", "last_connected_node", "node"} {
+		raw, ok := user[key]
+		if !ok || raw == nil {
+			continue
+		}
+
+		switch v := raw.(type) {
+		case string:
+			name := strings.TrimSpace(v)
+			if name != "" {
+				return name, "", []string{name}
+			}
+		case map[string]any:
+			name := extractNodeDisplayName(v)
+			nodeID := extractNodeID(v)
+			aliases := extractNodeAliases(v)
+			if name == "" && nodeID == "" {
+				continue
+			}
+			if name == "" {
+				name = nodeID
+			}
+			return name, nodeID, aliases
+		}
+	}
+
+	if traffic := extractUserTrafficMap(user); traffic != nil {
+		nodeID := extractTrimmedString(traffic, "lastConnectedNodeUuid")
+		if nodeID == "" {
+			nodeID = extractTrimmedString(traffic, "last_connected_node_uuid")
+		}
+		if nodeID != "" {
+			return nodeID, nodeID, []string{nodeID}
+		}
+	}
+
+	return "", "", nil
+}
+
+func extractLastConnectedNodeAliases(user map[string]any, nodeID, nodeName string) []string {
+	aliases := make([]string, 0, 6)
+	if nodeName != "" {
+		aliases = append(aliases, nodeName)
+	}
+	if nodeID != "" {
+		aliases = append(aliases, nodeID)
+	}
+
+	_, _, parsed := extractLastConnectedNodeInfo(user)
+	aliases = append(aliases, parsed...)
+	return uniqueStrings(aliases)
+}
+
+func extractTrimmedString(obj map[string]any, key string) string {
+	raw, ok := obj[key]
+	if !ok || raw == nil {
+		return ""
+	}
+	str, ok := anyToString(raw)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(str)
+}
+
+func uniqueStrings(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		key := strings.ToLower(item)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, item)
+	}
+	return out
 }
 
 func extractUserKeys(user map[string]any) []string {
@@ -836,27 +1349,8 @@ func extractUserDescription(user map[string]any) string {
 }
 
 func extractLastConnectedNode(user map[string]any) (string, []string) {
-	for _, key := range []string{"lastConnectedNode", "last_connected_node", "node"} {
-		raw, ok := user[key]
-		if !ok || raw == nil {
-			continue
-		}
-
-		switch v := raw.(type) {
-		case string:
-			name := strings.TrimSpace(v)
-			if name != "" {
-				return name, []string{name}
-			}
-		case map[string]any:
-			name := extractNodeDisplayName(v)
-			if name == "" {
-				continue
-			}
-			return name, extractNodeAliases(v)
-		}
-	}
-	return "", nil
+	name, _, aliases := extractLastConnectedNodeInfo(user)
+	return name, aliases
 }
 
 func extractNodeDisplayName(node map[string]any) string {
@@ -980,6 +1474,100 @@ func anyToInt(v any) (int, bool) {
 	}
 }
 
+func anyToInt64(v any) (int64, bool) {
+	switch value := v.(type) {
+	case int:
+		return int64(value), true
+	case int32:
+		return int64(value), true
+	case int64:
+		return value, true
+	case float64:
+		return int64(value), true
+	case json.Number:
+		i, err := value.Int64()
+		if err == nil {
+			return i, true
+		}
+		f, ferr := value.Float64()
+		if ferr != nil {
+			return 0, false
+		}
+		return int64(f), true
+	case string:
+		parsed := strings.TrimSpace(value)
+		if parsed == "" {
+			return 0, false
+		}
+		if i, err := strconv.ParseInt(parsed, 10, 64); err == nil {
+			return i, true
+		}
+		if f, err := strconv.ParseFloat(parsed, 64); err == nil {
+			return int64(f), true
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
+}
+
+func anyToTime(v any) (time.Time, bool) {
+	switch value := v.(type) {
+	case time.Time:
+		if value.IsZero() {
+			return time.Time{}, false
+		}
+		return value, true
+	case string:
+		raw := strings.TrimSpace(value)
+		if raw == "" {
+			return time.Time{}, false
+		}
+		layouts := []string{
+			time.RFC3339Nano,
+			time.RFC3339,
+			"2006-01-02 15:04:05",
+			"2006-01-02T15:04:05",
+			"2006-01-02",
+		}
+		for _, layout := range layouts {
+			if parsed, err := time.Parse(layout, raw); err == nil {
+				return parsed, true
+			}
+		}
+		if unixRaw, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			return unixToTime(unixRaw), true
+		}
+		return time.Time{}, false
+	case int:
+		return unixToTime(int64(value)), true
+	case int64:
+		return unixToTime(value), true
+	case float64:
+		return unixToTime(int64(value)), true
+	case json.Number:
+		if i, err := value.Int64(); err == nil {
+			return unixToTime(i), true
+		}
+		if f, err := value.Float64(); err == nil {
+			return unixToTime(int64(f)), true
+		}
+		return time.Time{}, false
+	default:
+		return time.Time{}, false
+	}
+}
+
+func unixToTime(raw int64) time.Time {
+	if raw > 1_000_000_000_000 {
+		return time.UnixMilli(raw)
+	}
+	if raw > 0 {
+		return time.Unix(raw, 0)
+	}
+	return time.Time{}
+}
+
 func anyToString(v any) (string, bool) {
 	switch value := v.(type) {
 	case string:
@@ -992,6 +1580,11 @@ func anyToString(v any) (string, bool) {
 		return strconv.Itoa(value), true
 	case int64:
 		return strconv.FormatInt(value, 10), true
+	case bool:
+		if value {
+			return "true", true
+		}
+		return "false", true
 	default:
 		return "", false
 	}

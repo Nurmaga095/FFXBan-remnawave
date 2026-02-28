@@ -4,247 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FFXBan Panel</title>
-  <style>
-    @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Sora:wght@600;700;800&display=swap");
-    :root{--bg:#050810;--bg2:#09111f;--panel:#0c1422;--line:#1e2d48;--line2:#162038;--text:#eaf0ff;--muted:#7a95be;--blue:#6280ff;--cyan:#1ad5f0;--green:#20c875;--amber:#fbbc24;--red:#f43f6e;--chip:#121d36;--shadow:0 32px 64px rgba(2,5,16,.55)}
-    *{box-sizing:border-box} html,body{height:100%}
-    body{margin:0;color:var(--text);font-family:Manrope,sans-serif;background:radial-gradient(ellipse 950px 430px at 4% -12%,rgba(98,128,255,.24),transparent 58%),radial-gradient(ellipse 800px 380px at 105% -8%,rgba(26,213,240,.2),transparent 55%),radial-gradient(ellipse 700px 700px at 75% 105%,rgba(140,80,255,.13),transparent 62%),linear-gradient(180deg,#050810 0%,#070d19 55%,#060c17 100%)}
-    .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(6,10,18,.84);backdrop-filter:blur(16px)}
-    .brand{display:flex;align-items:center;gap:10px;font-family:Sora,sans-serif;font-weight:800;font-size:18px;white-space:nowrap}
-    .brand-badge{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-size:16px;background:linear-gradient(145deg,#7b6fff,#1dd8f4);box-shadow:0 8px 24px rgba(120,110,255,.45);flex-shrink:0}
-    .page-current{font-size:13px;color:var(--muted);background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:7px 12px;white-space:nowrap}
-    .btn{height:40px;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:0 14px;color:#e9f1ff;font-weight:700;background:linear-gradient(180deg,#182440,#111d38);cursor:pointer;transition:.16s;white-space:nowrap}
-    .btn:hover{transform:translateY(-1px);border-color:rgba(98,128,255,.4);box-shadow:0 6px 20px rgba(0,0,0,.3)}
-    .btn.primary{border:0;background:linear-gradient(135deg,#6280ff,#1ad5f0);box-shadow:0 6px 20px rgba(98,128,255,.3)}
-    .btn.warn{border-color:#5a2a35;background:linear-gradient(180deg,#2a1920,#24141b);color:#ffbfd0}
-    .btn.danger{border-color:#7a3050;background:linear-gradient(180deg,#2d1522,#211020);color:#ff9fb4}
-    .top-actions{display:flex;gap:8px;align-items:center}
-    .search-wrap{display:flex;align-items:center;gap:6px;background:#0d1828;border:1px solid var(--line);border-radius:12px;padding:0 10px;height:40px;min-width:200px;transition:.2s;margin-left:auto}
-    .search-wrap:focus-within{border-color:#4f71ff}
-    .search-wrap input{background:none;border:none;outline:none;color:#e4edff;font-weight:600;font-family:Manrope,sans-serif;font-size:14px;width:100%;min-width:0}
-    .search-wrap input::placeholder{color:#4d6490}
-    .search-wrap span{color:#4d6490;font-size:16px;cursor:default}
-    .app{display:grid;grid-template-columns:270px 1fr;min-height:calc(100vh - 69px);transition:grid-template-columns .22s}
-    .app.sidebar-collapsed{grid-template-columns:62px 1fr}
-    .sidebar{margin:16px 0 16px 16px;padding:14px 12px;border-radius:20px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#0d1628,#0a1220 70%);box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.04);display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 102px);position:sticky;top:86px;overflow:hidden;transition:all .22s;min-width:62px}
-    .sidebar.collapsed{padding:10px 6px}
-    .side-head{padding:6px 8px 10px;border-bottom:1px solid var(--line2);display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:56px}
-    .side-title{margin:0;font-family:Sora,sans-serif;font-size:17px;white-space:nowrap;overflow:hidden}
-    .side-sub{margin:5px 0 0;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden}
-    .side-head-text{overflow:hidden}
-    .sidebar.collapsed .side-head-text{display:none}
-    .sidebar-toggle{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:#1a2740;color:#b8c9ed;cursor:pointer;display:grid;place-items:center;font-size:14px;flex-shrink:0;transition:.16s}
-    .sidebar-toggle:hover{border-color:#36518a;background:#1f3050}
-    .nav{overflow:auto;padding-right:4px;display:flex;flex-direction:column;gap:6px}
-    .nav::-webkit-scrollbar{width:4px}.nav::-webkit-scrollbar-track{background:transparent}.nav::-webkit-scrollbar-thumb{background:#243552;border-radius:4px}
-    .menu{width:100%;text-align:left;border:1px solid transparent;border-radius:12px;padding:10px 12px;background:transparent;color:#d8e4ff;display:flex;align-items:center;gap:10px;cursor:pointer;transition:.16s;font-weight:700}
-    .sidebar.collapsed .menu{justify-content:center;padding:10px 0}
-    .menu i{font-style:normal;width:26px;height:26px;display:grid;place-items:center;border-radius:8px;color:#b8c9ed;background:#1a2740;border:1px solid #2a3b60;font-size:13px;flex-shrink:0}
-    .menu span.menu-text{white-space:nowrap;overflow:hidden}
-    .sidebar.collapsed .menu .menu-text{display:none}
-    .menu:hover{background:rgba(255,255,255,.04);border-color:rgba(98,128,255,.2)}
-    .menu.active{color:#fff;background:linear-gradient(100deg,rgba(98,128,255,.38),rgba(26,213,240,.18));border-color:rgba(98,128,255,.5);box-shadow:0 8px 24px rgba(20,40,110,.4),inset 0 1px 0 rgba(255,255,255,.06)}
-    .menu.active i{background:rgba(98,128,255,.3);border-color:rgba(98,128,255,.6);color:#fff}
-    .side-foot{margin-top:auto;border-top:1px solid var(--line2);padding:10px 8px 4px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between;white-space:nowrap;overflow:hidden}
-    .sidebar.collapsed .side-foot{display:none}
-    .pulse::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#2fd683;margin-right:7px}
-    .content{padding:18px;overflow:auto}
-    .page{display:none}.page.active{display:block}
-    .section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:4px 2px 12px}
-    .section-head h2{margin:0;font-family:Sora,sans-serif;font-size:26px}
-    .section-head p{margin:4px 0 0;color:var(--muted);font-size:13px}
-    .section-head-actions{display:flex;gap:8px;align-items:center}
-    .stats-grid{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:12px;margin-bottom:12px}
-    .stat-card{border:1px solid rgba(255,255,255,.07);border-radius:16px;padding:12px 14px;background:linear-gradient(155deg,#101c32,#0c1628 60%);box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.05);min-height:100px}
-    .stat-label{color:#b7caef;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
-    .stat-value{margin-top:10px;font-size:34px;font-weight:800;line-height:1}
-    .stat-hint{margin-top:8px;color:#97aeda;font-size:12px;font-weight:600}
-    .stat-card.blue{border-color:rgba(98,128,255,.35);box-shadow:var(--shadow),0 0 30px rgba(98,128,255,.08)}.stat-card.cyan{border-color:rgba(26,213,240,.3);box-shadow:var(--shadow),0 0 30px rgba(26,213,240,.07)}.stat-card.green{border-color:rgba(32,200,117,.3);box-shadow:var(--shadow),0 0 30px rgba(32,200,117,.07)}.stat-card.amber{border-color:rgba(251,188,36,.25);box-shadow:var(--shadow),0 0 30px rgba(251,188,36,.06)}.stat-card.red{border-color:rgba(244,63,110,.3);box-shadow:var(--shadow),0 0 30px rgba(244,63,110,.07)}
-    @keyframes numPop{0%{transform:scale(1.2);color:#6daaff}100%{transform:scale(1)}}
-    .stat-anim{animation:numPop .35s ease-out}
-    .grid-2{display:grid;grid-template-columns:1.15fr .85fr;gap:12px;margin-bottom:12px}
-    .charts-row{display:grid;grid-template-columns:repeat(3,minmax(200px,1fr));gap:12px;margin-bottom:12px}
-    .chart-wrap{position:relative;height:185px}
-    .panel{border:1px solid rgba(255,255,255,.07);border-radius:18px;background:linear-gradient(160deg,#0f1b30,#0b1524);box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.04);padding:14px}
-    .panel h3{margin:0 0 12px;font-size:18px;font-family:Sora,sans-serif}
-    .sys-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:0}
-    .sys-card{position:relative;background:linear-gradient(155deg,#101c32,#0b1626);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:13px 14px;overflow:hidden;box-shadow:0 8px 24px rgba(2,5,16,.3)}
-    .sys-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--sys-accent,var(--blue));border-radius:14px 14px 0 0}
-    .sys-card h4{margin:0 0 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--sys-accent,var(--blue))}
-    .sys-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;font-size:12px}
-    .sys-row span{color:var(--muted)}
-    .sys-row b{color:#dae8ff;font-weight:600}
-    .sys-bar{height:7px;border-radius:4px;background:rgba(255,255,255,.07);overflow:hidden;margin:6px 0 3px}
-    .sys-bar-fill{height:100%;border-radius:4px;transition:width .5s ease}
-    .sys-bar-fill.ok{background:linear-gradient(90deg,#1aab68,var(--green))}
-    .sys-bar-fill.warn{background:linear-gradient(90deg,#e8980a,var(--amber))}
-    .sys-bar-fill.crit{background:linear-gradient(90deg,#e8224a,var(--red))}
-    .sys-bar-label{display:flex;font-size:11px;color:var(--muted);margin-bottom:6px}
-    .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-    .pager{display:flex;align-items:center;gap:6px;margin-top:12px;flex-wrap:wrap}
-    .pager .pager-info{color:var(--muted);font-size:13px;margin-right:auto}
-    .pager .pager-btn{padding:6px 12px;background:#0f1a2f;border:1px solid var(--line);color:#c4d6f0;border-radius:8px;cursor:pointer;font-size:13px;font-family:Manrope,sans-serif}
-    .pager .pager-btn:hover{background:#16274a;border-color:var(--blue)}
-    .pager .pager-btn.active{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700}
-    .pager .pager-btn:disabled{opacity:.35;cursor:default}
-    .input,.select{height:42px;background:#0f1a2f;border:1px solid var(--line);color:#e4edff;border-radius:12px;padding:0 12px;min-width:220px;outline:0;font-weight:600;font-family:Manrope,sans-serif}
-    .input::placeholder{color:#6f84ad}
-    .select{cursor:pointer}
-    .table-wrap{border:1px solid rgba(255,255,255,.07);border-radius:16px;overflow:auto;background:linear-gradient(180deg,#0e1a2e,#0b1424)}
-    table{width:100%;border-collapse:collapse;min-width:760px}
-    th{padding:13px 12px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#8fb0d8;background:#0d1a30;border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap}
-    th.th-check{width:36px;padding:13px 8px}
-    td{padding:11px 12px;border-bottom:1px solid #1f2d48;font-size:14px;color:#e3ecff;vertical-align:middle}
-    td.td-check{padding:11px 8px}
-    tr:last-child td{border-bottom:0} tr:hover td{background:#15233c}
-    .row-click{cursor:pointer}
-    .badge{display:inline-flex;align-items:center;justify-content:center;min-width:26px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:800;border:1px solid transparent;line-height:1.2}
-    .b-green{background:rgba(36,196,122,.2);color:#6effb6;border-color:rgba(61,211,135,.35)}
-    .b-red{background:rgba(255,84,119,.2);color:#ff9fb4;border-color:rgba(245,92,124,.35)}
-    .b-blue{background:rgba(79,113,255,.2);color:#bfd0ff;border-color:rgba(98,130,255,.38)}
-    .b-amber{background:rgba(255,190,59,.18);color:#ffd27d;border-color:rgba(255,190,59,.32)}
-    .b-cyan{background:rgba(18,201,232,.18);color:#9cecff;border-color:rgba(18,201,232,.35)}
-    .muted{color:var(--muted)}
-    .pill{display:inline-block;padding:3px 9px;border:1px solid #2a3f67;border-radius:9px;background:#13203a;font-size:12px;font-weight:700;color:#c9daff}
-    /* trigger progress bar */
-    .trig-wrap{display:flex;align-items:center;gap:8px;min-width:110px}
-    .trig-text{font-size:13px;font-weight:700;white-space:nowrap;min-width:36px}
-    .trig-bar{flex:1;height:6px;background:#1a2a44;border-radius:3px;overflow:hidden;min-width:50px}
-    .trig-fill{height:100%;border-radius:3px;background:var(--amber);transition:width .4s}
-    .trig-fill.full{background:var(--red)}
-    /* bulk action bar */
-    .bulk-bar{display:none;align-items:center;gap:10px;padding:8px 14px;background:linear-gradient(90deg,rgba(79,113,255,.12),rgba(18,201,232,.08));border:1px solid var(--line);border-radius:12px;margin-bottom:10px}
-    .bulk-bar.show{display:flex}
-    .bulk-count{font-weight:700;color:#b0c4ff;font-size:14px}
-    /* log filter */
-    .log-filter{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px;padding:8px 14px;background:#0d1828;border:1px solid var(--line);border-radius:12px;align-items:center}
-    .log-filter .lf-label{font-size:12px;color:var(--muted);font-weight:700;margin-right:4px}
-    .log-filter label{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;color:#cddcff}
-    .log-filter input[type=checkbox]{accent-color:var(--blue);width:14px;height:14px;cursor:pointer}
-    /* timeline */
-    .timeline{position:relative;padding-left:22px;margin-top:4px}
-    .timeline::before{content:"";position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:var(--line);border-radius:2px}
-    .tl-item{position:relative;margin-bottom:14px}
-    .tl-item:last-child{margin-bottom:0}
-    .tl-dot{position:absolute;left:-18px;top:5px;width:12px;height:12px;border-radius:50%;background:var(--blue);border:2px solid #0d1828;flex-shrink:0}
-    .tl-dot.block{background:var(--red)}
-    .tl-dot.unblock{background:var(--green)}
-    .tl-dot.violation{background:var(--amber)}
-    .tl-dot.perm{background:#a855f7}
-    .tl-dot.geo{background:var(--cyan)}
-    .tl-time{font-size:11px;color:var(--muted);font-weight:600}
-    .tl-type{font-size:11px;font-weight:700;margin:2px 0;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-    .tl-msg{font-size:13px;color:#d0dcff;word-break:break-word}
-    .tl-trigs{display:inline-flex;gap:3px;align-items:center;vertical-align:middle;margin:0 3px}
-    .tl-trig{width:7px;height:7px;border-radius:50%;display:inline-block}
-    .tl-trig.hit{background:var(--blue);box-shadow:0 0 4px var(--blue)}
-    .tl-trig.miss{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15)}
-    .tl-ip{color:var(--muted);font-size:11px;margin-left:6px;font-weight:600}
-    /* countdown */
-    .countdown{font-weight:700;color:var(--amber);font-size:13px}
-    .countdown.expired{color:var(--muted)}
-    /* config table */
-    .cfg-table{width:100%;border-collapse:collapse}
-    .cfg-table td{padding:8px 12px;border-bottom:1px solid #1f2d48;font-size:13px;vertical-align:top}
-    .cfg-table td:first-child{color:var(--muted);font-size:12px;font-weight:700;width:45%;white-space:nowrap}
-    .cfg-table td:last-child{font-weight:600;color:#e3ecff;word-break:break-all}
-    .cfg-table tr:last-child td{border-bottom:0}
-    /* modal */
-    .modal,.auth{position:fixed;inset:0;background:rgba(7,11,20,.7);backdrop-filter:blur(4px);display:none;z-index:60}
-    .modal.active,.auth.active{display:flex}
-    .modal{justify-content:center;align-items:center;padding:18px}.auth{align-items:center;justify-content:center;padding:18px}
-    .box{width:min(1180px,96vw);max-height:92vh;background:linear-gradient(180deg,#0f1c32,#0b1528);border:1px solid rgba(255,255,255,.08);border-radius:22px;overflow:auto;padding:20px 22px;box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.05)}
-    .login{width:min(440px,100%);border:1px solid rgba(98,128,255,.2);border-radius:20px;background:linear-gradient(175deg,#101e38,#0c1730);padding:22px;box-shadow:var(--shadow),0 0 60px rgba(98,128,255,.08)}
-    .close{float:right;border:1px solid var(--line);border-radius:10px;background:#15233f;color:#e2ecff;height:36px;padding:0 12px;cursor:pointer;font-weight:700}
-    .modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-    .mini-grid{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px;margin:12px 0 14px}
-    .mini{border:1px solid var(--line2);border-radius:12px;background:#111d35;padding:10px}
-    .mini b{display:block;font-size:22px;margin-top:4px}
-    .facts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
-    .facts-card{border:1px solid var(--line2);border-radius:12px;background:#111d35;padding:12px}
-    .facts-row{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid #1f2d48}
-    .facts-row:last-child{border-bottom:0}
-    .facts-row span{color:var(--muted);font-size:13px}
-    .facts-row b{font-size:15px;text-align:right}
-    .warn-box{border:1px solid rgba(255,190,59,.35);background:linear-gradient(170deg,rgba(255,190,59,.17),rgba(255,190,59,.08));border-radius:12px;padding:10px 12px;margin-bottom:14px}
-    .confirm-card{width:min(560px,100%);border:1px solid #38548a;border-radius:16px;background:linear-gradient(175deg,#101c34,#0b1529);padding:16px;box-shadow:var(--shadow)}
-    .confirm-title{margin:0 0 10px;font-family:Sora,sans-serif;font-size:22px}
-    .confirm-sub{margin:0 0 8px;color:var(--muted);font-size:13px}
-    .confirm-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
-    .notice{position:fixed;right:18px;bottom:18px;z-index:80;min-width:260px;max-width:420px;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:linear-gradient(170deg,#172744,#13223c);color:#e8f1ff;font-weight:700;opacity:0;transform:translateY(8px);pointer-events:none;transition:.2s}
-    .notice.show{opacity:1;transform:translateY(0)}
-    .notice.ok{border-color:#2f7d5f}
-    .notice.err{border-color:#7e3a50}
-    .ws-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2fd683;margin-right:6px;transition:background .4s;flex-shrink:0}
-    .ws-dot.warn{background:#ffbe3b}
-    .ws-dot.err{background:#ff5477}
-    .user-open-link{cursor:pointer}
-    .user-open-link:hover b{text-decoration:underline}
-    .status-cell{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:160px}
-    .status-row{display:flex;align-items:center;gap:8px}
-    .status-name{color:#8fa8d4;font-size:12px;min-width:72px}
-    .status-primary{display:inline-flex;align-items:center;justify-content:center;min-width:88px}
-    .user-shell{display:flex;flex-direction:column;gap:14px}
-    .user-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;border:1px solid var(--line2);background:linear-gradient(170deg,#132340,#0f1b34 60%);border-radius:16px;padding:14px}
-    .user-title{margin:0;font-family:Sora,sans-serif;font-size:30px;line-height:1.05}
-    .user-id{margin-top:6px;color:#9ab0d7;font-weight:700}
-    .user-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-    .meta-chip{display:inline-flex;align-items:center;gap:8px;padding:5px 10px;border:1px solid #2c436f;border-radius:999px;background:#12213a}
-    .meta-chip.multi{flex-wrap:wrap;max-width:100%}
-    .meta-chip .k{font-size:12px;color:#8ea6d2}
-    .user-actions{display:flex;flex-direction:column;gap:8px;align-items:stretch}
-    .user-actions-row{display:flex;gap:8px}
-    .user-actions-row.ban-row{justify-content:flex-end}
-    .user-actions-row .btn{flex:1}
-    .user-kpi{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:10px}
-    .kpi-item{border:1px solid var(--line2);border-radius:12px;background:#101c34;padding:10px}
-    .kpi-item small{display:block;color:#8ea6d2;font-size:12px}
-    .kpi-item b{display:block;font-size:25px;line-height:1.05;margin-top:4px}
-    .kpi-item b.slim{font-size:16px}
-    .user-panels{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .user-card{border:1px solid var(--line2);border-radius:14px;background:#101c34;padding:12px}
-    .user-card h3{margin:0 0 8px;font-size:16px;font-family:Sora,sans-serif}
-    .dur-select{height:40px;background:#0d1828;border:1px solid var(--line);color:#e4edff;border-radius:10px;padding:0 10px;font-weight:700;font-family:Manrope,sans-serif;outline:none;cursor:pointer}
-    .act-divider{width:1px;background:var(--line);height:36px;margin:0 2px;flex-shrink:0}
-    input[type=checkbox]{cursor:pointer;accent-color:var(--blue);width:15px;height:15px}
-    @media (max-width:1300px){.stats-grid{grid-template-columns:repeat(3,minmax(160px,1fr))}.grid-2{grid-template-columns:1fr}.charts-row{grid-template-columns:1fr 1fr}.user-kpi{grid-template-columns:repeat(3,minmax(110px,1fr))}}
-    @media (max-width:1020px){.app{grid-template-columns:1fr!important}.sidebar{margin:12px 12px 0;max-height:none;position:static}.content{padding:12px}.stats-grid{grid-template-columns:repeat(2,minmax(140px,1fr))}.charts-row{grid-template-columns:1fr}.mini-grid{grid-template-columns:repeat(2,minmax(120px,1fr))}.facts{grid-template-columns:1fr}.page-current{display:none}.box{width:100%;max-height:96vh;padding:14px}.user-top{flex-direction:column}.user-panels{grid-template-columns:1fr}.user-kpi{grid-template-columns:repeat(2,minmax(110px,1fr))}}
-    /* pulse animation */
-    @keyframes pulseRing{0%,100%{box-shadow:0 0 0 0 rgba(47,214,131,.55)}60%{box-shadow:0 0 0 5px rgba(47,214,131,0)}}
-    .pulse::before{animation:pulseRing 2.2s ease infinite}
-    /* progress bar */
-    .progress-top{position:fixed;top:0;left:0;height:2px;width:0;background:linear-gradient(90deg,var(--blue),var(--cyan));z-index:200;transition:width .25s ease,opacity .3s ease;opacity:0;border-radius:0 2px 2px 0}
-    /* mode switcher */
-    .mode-switch{display:flex;background:#0d1828;border:1px solid var(--line);border-radius:10px;padding:3px;margin-left:24px}
-    .mode-btn{background:transparent;border:none;color:#6f84ad;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:.2s}
-    .mode-btn:hover{color:#b7caef}
-    .mode-btn.active{background:#1a2740;color:#e9f1ff;box-shadow:0 2px 6px rgba(0,0,0,.2)}
-    /* colored user rows */
-    tr.row-blocked td{background:rgba(255,84,119,.06)!important}
-    tr.row-blocked td:first-child{border-left:3px solid var(--red)}
-    tr.row-violated td{background:rgba(255,190,59,.05)!important}
-    tr.row-violated td:first-child{border-left:3px solid var(--amber)}
-    /* colored log rows */
-    tr.log-block td:first-child{border-left:3px solid var(--red)}
-    tr.log-unblock td:first-child{border-left:3px solid var(--green)}
-    tr.log-violation td:first-child{border-left:3px solid var(--amber)}
-    tr.log-pending td:first-child{border-left:3px solid var(--blue)}
-    /* toast icons */
-    .notice.ok::before{content:"✓  ";color:var(--green)}
-    .notice.err::before{content:"✕  ";color:var(--red)}
-    /* sticky user header inside modal */
-    .user-top{position:sticky;top:-20px;z-index:4;margin:-2px -2px 0}
-  </style>
+    <link rel="stylesheet" href="/panel.css?v=20260228c">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ansi_up@6.0.2/ansi_up.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
 </head>
 <body>
   <div id="progressTop" class="progress-top"></div>
   <header class="topbar">
     <div class="brand"><span class="brand-badge">⚡</span>FFXBan <span class="page-current" id="currentPage">Дашборд</span></div>
-    <div class="mode-switch" id="modeSwitch">
-      <button class="mode-btn active" data-mode="remnawave">Remnawave</button>
-      <button class="mode-btn" data-mode="3xui">3x-ui</button>
-    </div>
     <div class="search-wrap">
       <span>🔍</span>
       <input id="globalSearch" placeholder="Поиск по email / ID..." autocomplete="off">
@@ -260,12 +30,11 @@
       <nav class="nav">
         <button class="menu active" data-p="dashboard" data-title="Дашборд"><i>◈</i><span class="menu-text">Дашборд</span></button>
         <button class="menu" data-p="users" data-title="Пользователи"><i>◉</i><span class="menu-text">Подключенные пользователи</span></button>
+        <button class="menu" data-p="traffic" data-title="Расход трафика"><i>◌</i><span class="menu-text">Расход трафика</span></button>
         <button class="menu" data-p="activebans" data-title="Активные баны"><i>🔒</i><span class="menu-text">Активные баны</span></button>
-        <button class="menu" data-p="pidarasy" data-title="Перманентный бан"><i>☠</i><span class="menu-text">Перманентный бан</span></button>
-        <button class="menu" data-p="net" data-title="Статистика по сетям"><i>◍</i><span class="menu-text">Статистика по сетям</span></button>
-        <button class="menu" data-p="shared" data-title="Общие IP"><i>⌁</i><span class="menu-text">Общие IP</span></button>
-        <button class="menu" data-p="logs" data-title="Логи"><i>☰</i><span class="menu-text">Логи</span></button>
-        <button class="menu" data-p="hwid" data-title="HWID мониторинг"><i>▦</i><span class="menu-text">HWID мониторинг</span></button>
+        <button class="menu" data-p="nodeops" data-title="Управление нодами"><i>⌘</i><span class="menu-text">Управление нодами</span></button>
+        <button class="menu" data-p="sshterm" data-title="SSH Терминал"><i>▶</i><span class="menu-text">SSH Терминал</span></button>
+        <button class="menu" data-p="permanent-ban" data-title="Перманентный бан"><i>☠</i><span class="menu-text">Перманентный бан</span></button>
         <button class="menu" data-p="settings" data-title="Настройки"><i>⚙</i><span class="menu-text">Настройки</span></button>
       </nav>
       <div class="side-foot"><span class="pulse">Онлайн</span><span id="wsStatusLabel" style="display:flex;align-items:center"><span id="wsDot" class="ws-dot"></span><span id="wsText">live</span></span></div>
@@ -282,34 +51,138 @@
           <div class="stat-card cyan"><div class="stat-label">Ноды</div><div class="stat-value" id="kNodes">0</div><div class="stat-hint">источники событий</div></div>
           <div class="stat-card"><div class="stat-label">Очереди</div><div class="stat-value" id="kQueue">0</div><div class="stat-hint">log + side effect</div></div>
         </div>
-        <div class="charts-row">
+        <!-- Тренды + Алерты -->
+        <div class="db-row-main">
+          <div class="panel">
+            <div class="db-ph">
+              <div>
+                <h3>Тренды активности</h3>
+                <span class="muted" style="font-size:12px" id="trendLabel">нет данных</span>
+              </div>
+            </div>
+            <div style="position:relative;height:200px"><canvas id="chartTrend"></canvas></div>
+          </div>
+          <div class="panel db-flex-col">
+            <div class="db-ph">
+              <h3>Алерты</h3>
+              <span class="alerts-count" id="alertsCount">0</span>
+            </div>
+            <div id="alertsCenter" class="db-alerts-list"></div>
+            <div class="db-alerts-ts"><span id="alertsUpdatedAt">обновление...</span></div>
+          </div>
+        </div>
+        <!-- Графики распределения -->
+        <div class="db-row-charts">
           <div class="panel"><h3>Статус пользователей</h3><div class="chart-wrap"><canvas id="chartStatus"></canvas></div></div>
           <div class="panel"><h3>Типы подключений</h3><div class="chart-wrap"><canvas id="chartNetwork"></canvas></div></div>
-          <div class="panel"><h3>Состояние нод</h3><div class="chart-wrap"><canvas id="chartNodes"></canvas></div></div>
         </div>
-        <div class="grid-2">
+        <!-- Ноды -->
+        <div class="panel nodes-panel db-nodes-full">
+          <div class="db-ph">
+            <div class="nodes-title-wrap">
+              <div class="nodes-icon">▣</div>
+              <div class="nodes-title-text">
+                <h3 style="margin:0 0 2px">Ноды</h3>
+                <p id="nodesSummaryHint" style="margin:0;color:#88a6d3;font-size:13px">0 онлайн / 0 всего</p>
+              </div>
+            </div>
+            <div class="nodes-legend">
+              <span class="nodes-legend-item"><i class="nodes-legend-dot ok"></i><span id="nodesOnlineCount">0</span></span>
+              <span class="nodes-legend-item"><i class="nodes-legend-dot err"></i><span id="nodesOfflineCount">0</span></span>
+            </div>
+          </div>
+          <div id="nodesCards" class="nodes-cards"></div>
+        </div>
+        <!-- Горячие пользователи + Системный статус -->
+        <div class="db-row-bottom">
+          <div class="panel">
+            <div class="db-ph">
+              <h3>Горячие пользователи</h3>
+              <select id="fHotNode" class="select" style="min-width:210px"><option value="all">Нода: все</option></select>
+            </div>
+            <div class="table-wrap"><table><thead><tr><th>Пользователь</th><th>IP</th><th>Лимит</th><th>Нода</th><th>Последняя активность</th><th>Статус</th><th>Активность</th></tr></thead><tbody id="tbHotUsers"></tbody></table></div>
+          </div>
           <div class="panel">
             <h3>Системный статус</h3>
             <div id="sysinfoBlock" style="margin-top:14px"></div>
           </div>
-          <div class="panel">
-            <h3>Состояние серверов</h3>
-            <div class="table-wrap"><table><thead><tr><th>#</th><th>Сервер</th><th>Статус</th></tr></thead><tbody id="tbTopNodes"></tbody></table></div>
-          </div>
         </div>
-        <div class="panel"><h3>Горячие пользователи</h3><div class="table-wrap"><table><thead><tr><th>Пользователь</th><th>IP</th><th>Лимит</th><th>Нода</th><th>Последняя активность</th><th>Статус</th><th>Активность</th></tr></thead><tbody id="tbHotUsers"></tbody></table></div></div>
       </section>
 
       <!-- USERS -->
       <section id="p-users" class="page">
         <div class="section-head"><div><h2>Подключенные пользователи</h2><p>Поиск и ручные действия по пользователям</p></div></div>
-        <div class="toolbar">
+        <div class="toolbar sticky-toolbar">
           <input id="qUser" class="input" placeholder="Поиск по email, IP, ноде">
           <select id="fState" class="select"><option value="all">Все статусы</option><option value="ok">Норма</option><option value="bad">Нарушение</option><option value="blocked">Заблокирован</option></select>
           <select id="fNode" class="select"><option value="all">Последнее подключение: все</option></select>
         </div>
-        <div class="table-wrap"><table><thead><tr><th>#</th><th>Пользователь</th><th>IP</th><th>Лимит</th><th>Источники</th><th>Триггеры</th><th>Нода</th><th>Последняя активность</th><th>Статус</th><th>Активность</th></tr></thead><tbody id="tbUsers"></tbody></table></div>
+        <div class="bulk-bar" id="usersBulkBar">
+          <span class="bulk-count" id="usersBulkCount">0 выбрано</span>
+          <select id="usersBulkDuration" class="select" style="height:36px;min-width:140px">
+            <option value="30m">30 мин</option>
+            <option value="1h">1 час</option>
+            <option value="6h">6 часов</option>
+            <option value="24h">24 часа</option>
+            <option value="permanent">Навсегда</option>
+          </select>
+          <button class="btn danger" id="usersBulkBlock">Заблокировать</button>
+          <button class="btn" id="usersBulkUnblock">Разблокировать</button>
+          <button class="btn" style="margin-left:auto" id="usersBulkDeselect">Снять</button>
+        </div>
+        <div class="table-wrap"><table><thead><tr><th class="th-check"><input type="checkbox" id="usersCheckAll"></th><th>#</th><th>Пользователь</th><th>IP</th><th>Лимит</th><th>Источники</th><th>Триггеры</th><th>Нода</th><th>Последняя активность</th><th>Статус</th><th>Активность</th></tr></thead><tbody id="tbUsers"></tbody></table></div>
         <div id="usersPager" class="pager"></div>
+      </section>
+
+      <!-- TRAFFIC -->
+      <section id="p-traffic" class="page">
+        <div class="section-head">
+          <div><h2>Расход трафика</h2><p>Статистика трафика по пользователям и нодам</p></div>
+          <div class="section-head-actions">
+            <button class="btn" id="trafficExportBtn">⬇ Экспорт CSV</button>
+          </div>
+        </div>
+        <div class="mini-grid" style="margin-top:0">
+          <div class="mini"><span class="muted">Пользователей</span><b id="kTrafficUsers">0</b></div>
+          <div class="mini"><span class="muted">Онлайн</span><b id="kTrafficOnline">0</b></div>
+          <div class="mini"><span class="muted">Использовано</span><b id="kTrafficUsed">0 B</b></div>
+          <div class="mini"><span class="muted">Лимит</span><b id="kTrafficLimit">0 B</b></div>
+        </div>
+        <div class="toolbar sticky-toolbar">
+          <div id="trafficPeriodGroup" class="seg-group">
+            <button class="seg-btn" data-period="1d">1д</button>
+            <button class="seg-btn" data-period="3d">3д</button>
+            <button class="seg-btn" data-period="7d">7д</button>
+            <button class="seg-btn" data-period="14d">14д</button>
+            <button class="seg-btn active" data-period="30d">30д</button>
+          </div>
+          <input id="qTraffic" class="input" placeholder="Поиск по имени или user_id">
+          <select id="fTrafficTariff" class="select"><option value="all">Тариф: все</option></select>
+          <select id="fTrafficNode" class="select"><option value="all">Ноды: все</option></select>
+          <select id="fTrafficStatus" class="select"><option value="all">Статус: все</option></select>
+        </div>
+        <p class="muted" id="trafficMetaHint" style="margin:0 2px 10px"></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Пользователь</th>
+                <th>Тариф</th>
+                <th>Устройств</th>
+                <th>Подкл.</th>
+                <th>Всего ГБ</th>
+                <th>Lifetime ГБ</th>
+                <th>Лимит ГБ</th>
+                <th>Покрытие</th>
+                <th>Начало</th>
+                <th>Конец</th>
+                <th>Посл. нода</th>
+                <th>Статус</th>
+              </tr>
+            </thead>
+            <tbody id="tbTraffic"></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- VIOLATORS -->
@@ -351,8 +224,126 @@
         <div class="table-wrap"><table><thead><tr><th>IP</th><th>Пользователи</th><th>Нода</th><th>Установлен</th><th>Длительность</th><th>Осталось</th></tr></thead><tbody id="tbActiveBans"></tbody></table></div>
       </section>
 
+      <!-- NODE OPS -->
+      <section id="p-nodeops" class="page">
+        <div class="section-head">
+          <div><h2>Управление нодами</h2><p>SSH-команды на ноды с индивидуальными учётными данными</p></div>
+        </div>
+        <div class="nodeops-grid">
+          <div class="nodeops-side">
+            <div class="panel">
+              <h3>Ноды</h3>
+              <div class="nodeops-actions">
+                <button class="btn" id="nodeSshSelectAll">Все</button>
+                <button class="btn" id="nodeSshSelectOnline">Онлайн</button>
+                <button class="btn" id="nodeSshClear">Снять</button>
+                <button class="btn" id="nodeSshRefresh">Обновить</button>
+              </div>
+              <p class="nodeops-counter" id="nodeSshCounter">Выбрано: 0</p>
+              <div class="nodeops-list" id="nodeSshList"></div>
+            </div>
+          </div>
+          <div class="nodeops-main">
+            <div class="panel" id="nodeSshSinglePanel">
+              <h3 id="nodeSshSingleTitle">Терминал ноды</h3>
+              <textarea id="nodeSshSingleCommand" class="nodeops-cmd" placeholder="Команда для выбранной ноды, например: uname -a"></textarea>
+              <div class="nodeops-runbar" style="margin-top:10px">
+                <select id="nodeSshSingleTimeout" class="select">
+                  <option value="20">Таймаут: 20 сек</option>
+                  <option value="45" selected>Таймаут: 45 сек</option>
+                  <option value="90">Таймаут: 90 сек</option>
+                  <option value="180">Таймаут: 180 сек</option>
+                </select>
+                <button class="btn primary" id="nodeSshRunSingle">Выполнить на ноде</button>
+                <button class="btn" id="nodeSshSingleClear">Очистить вывод</button>
+              </div>
+              <p class="nodeops-summary" id="nodeSshSingleHint">Нажмите на ноду слева, чтобы открыть терминал.</p>
+            </div>
+            <div class="panel nodeops-panel-hide" id="nodeSshMultiPanel">
+              <h3>Команда (массово)</h3>
+              <textarea id="nodeSshCommand" class="nodeops-cmd" placeholder="Например: sudo systemctl status xray --no-pager"></textarea>
+              <div class="nodeops-runbar" style="margin-top:10px">
+                <select id="nodeSshTimeout" class="select">
+                  <option value="20">Таймаут: 20 сек</option>
+                  <option value="45" selected>Таймаут: 45 сек</option>
+                  <option value="90">Таймаут: 90 сек</option>
+                  <option value="180">Таймаут: 180 сек</option>
+                </select>
+                <button class="btn primary" id="nodeSshRun">Выполнить на выбранных</button>
+                <button class="btn primary" id="nodeSshRunAll" style="background:linear-gradient(135deg,#8b5cf6,#1ad5f0)">⚡ Все ноды</button>
+                <button class="btn" id="nodeSshOutputClear">Очистить вывод</button>
+              </div>
+              <p class="nodeops-summary" id="nodeSshSummary">Готово к выполнению.</p>
+            </div>
+            <div class="panel">
+              <h3 id="nodeSshOutputTitle">Терминал</h3>
+              <div id="nodeSshOutput" class="term-wrap">
+                <div class="term-empty">Нажмите на ноду слева, чтобы открыть терминал.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- NODE CREDENTIALS MODAL -->
+      <div id="credModalShell" class="cred-modal-shell">
+        <div class="cred-modal-backdrop" id="credModalBackdrop"></div>
+        <div class="cred-modal">
+          <div class="cred-modal-head">
+            <div>
+              <h3 class="cred-modal-title" id="credModalTitle">SSH-учётные данные</h3>
+              <p class="cred-modal-sub" id="credModalSub"></p>
+            </div>
+            <button class="cred-modal-close" id="credModalClose">✕</button>
+          </div>
+          <div class="cred-field">
+            <label for="credUser">Пользователь</label>
+            <input id="credUser" class="input" type="text" placeholder="root" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="cred-field">
+            <label for="credPassword">Пароль</label>
+            <div class="cred-pw-wrap">
+              <input id="credPassword" class="input" type="password" placeholder="Пароль SSH" autocomplete="new-password">
+              <button class="cred-pw-toggle" id="credPwToggle" title="Показать/скрыть пароль">👁</button>
+            </div>
+          </div>
+          <div class="cred-field">
+            <label for="credPrivateKey">Приватный ключ (опционально)</label>
+            <textarea id="credPrivateKey" class="input cred-key-input" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+            <p class="cred-hint">Для key-only нод укажите user и вставьте приватный ключ. Если ключ уже сохранён, оставьте поле пустым, чтобы не менять.</p>
+          </div>
+          <div class="cred-modal-actions">
+            <button class="btn primary" id="credSaveBtn">Сохранить</button>
+            <button class="btn" id="credOpenTermBtn" style="background:linear-gradient(135deg,#1a2e50,#0f2040);border-color:rgba(26,213,240,.3)">▶ Терминал</button>
+            <button class="btn danger" id="credDeleteBtn" style="display:none">Удалить</button>
+            <button class="btn" id="credCancelBtn">Отмена</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SSH TERMINAL -->
+      <section id="p-sshterm" class="page">
+        <div class="section-head">
+          <div><h2>SSH Терминал</h2><p>Интерактивный терминал нод в реальном времени</p></div>
+        </div>
+        <div class="sshterm-toolbar">
+          <select id="sstNodeSelect" class="select"><option value="">— выберите ноду —</option></select>
+          <button class="btn primary" id="sstConnect">Подключить</button>
+          <button class="btn" id="sstDisconnectAll">Закрыть все</button>
+          <span id="sstStatus" style="font-size:12px;color:#7a9bc5"></span>
+        </div>
+        <div class="sshterm-tabs" id="sstTabs"></div>
+        <div class="sshterm-panel" id="sstPanel">
+          <div class="sshterm-empty-state" id="sstEmptyState">
+            <div class="sst-icon">▶</div>
+            <p>Выберите ноду и нажмите <b>Подключить</b></p>
+            <p style="font-size:12px;color:#3d5880">Для подключения нужны credentials — нажмите ⚙ в разделе Управление нодами</p>
+          </div>
+        </div>
+      </section>
+
       <!-- PERMANENT BAN -->
-      <section id="p-pidarasy" class="page"><div class="section-head"><div><h2>Перманентный бан</h2><p>Подтвержденный шаринг с перманентной блокировкой</p></div></div><div class="table-wrap"><table><thead><tr><th>Пользователь</th><th>IP</th><th>Лимит</th><th>Триггеры</th><th>Ноды</th><th>Навсегда с</th></tr></thead><tbody id="tbPidarasy"></tbody></table></div></section>
+      <section id="p-permanent-ban" class="page"><div class="section-head"><div><h2>Перманентный бан</h2><p>Подтвержденный шаринг с перманентной блокировкой</p></div></div><div class="table-wrap"><table><thead><tr><th>Пользователь</th><th>IP</th><th>Лимит</th><th>Триггеры</th><th>Ноды</th><th>Навсегда с</th></tr></thead><tbody id="tbPermBan"></tbody></table></div></section>
 
       <!-- NETWORK STATS -->
       <section id="p-net" class="page"><div class="section-head"><div><h2>Статистика по сетям</h2><p>Классификация: mobile / wifi / cable</p></div></div><div class="table-wrap"><table><thead><tr><th>Тип сети</th><th>Пользователей</th><th>IP</th><th>Провайдеры</th><th>Примеры IP</th></tr></thead><tbody id="tbNet"></tbody></table></div></section>
@@ -363,7 +354,7 @@
       <!-- LOGS -->
       <section id="p-logs" class="page">
         <div class="section-head"><div><h2>Логи</h2><p>Последние события активности и блокировок</p></div></div>
-        <div class="log-filter">
+        <div class="log-filter sticky-toolbar">
           <span class="lf-label">Фильтр:</span>
           <label><input type="checkbox" class="lf-cb" data-cat="block" checked>BLOCK</label>
           <label><input type="checkbox" class="lf-cb" data-cat="violation" checked>VIOLATION</label>
@@ -389,8 +380,18 @@
           </div>
           <p id="passMsg" class="muted"></p>
         </div>
+        <div class="panel" style="margin-bottom:14px">
+          <h3>Runtime overrides</h3>
+          <p class="muted" style="margin:8px 0 12px">Изменения применяются без рестарта и хранятся в Redis.</p>
+          <div id="cfgEditor"><p class="muted">Загрузка редактора...</p></div>
+          <div class="toolbar" style="margin-top:12px">
+            <button class="btn primary" id="saveOverridesBtn">Сохранить все параметры</button>
+            <button class="btn" id="resetOverridesBtn">Сбросить overrides</button>
+          </div>
+          <p id="runtimeCfgMsg" class="muted"></p>
+        </div>
         <div class="panel">
-          <h3>Конфигурация системы <span style="font-size:12px;color:var(--muted);font-weight:600">(только чтение)</span></h3>
+          <h3>Конфигурация системы <span style="font-size:12px;color:var(--muted);font-weight:600">(effective)</span></h3>
           <div id="cfgPanel"><p class="muted">Загрузка...</p></div>
         </div>
       </section>
@@ -411,13 +412,26 @@
       </div>
     </div>
   </div>
+  <div id="nodeDrawer" class="drawer-shell">
+    <div id="nodeDrawerBackdrop" class="drawer-backdrop"></div>
+    <aside class="drawer-panel">
+      <div class="drawer-head">
+        <div>
+          <h3 class="drawer-title" id="nodeDrawerTitle">Нода</h3>
+          <p class="drawer-sub" id="nodeDrawerSub">детали</p>
+        </div>
+        <button type="button" class="btn" id="nodeDrawerClose">Закрыть</button>
+      </div>
+      <div id="nodeDrawerBody" class="drawer-body"></div>
+    </aside>
+  </div>
   <div id="notice" class="notice"></div>
 
   <script>
-    let stats={}, users=[], nodes=[], logs=[], activeBans=[], sharingBanUsers=[], permanentSharers=[], nodeHealth=[], networkTypes=[], cfgData={}, sysinfo={};
+    let stats={}, users=[], nodes=[], logs=[], activeBans=[], sharingBanUsers=[], permanentSharers=[], nodeHealth=[], networkTypes=[], cfgData={}, sysinfo={}, trafficData={rows:[],summary:{},filters:{},meta:{}};
     let usersPage = 0;
     const USERS_PAGE_SIZE = 50;
-    let appMode = localStorage.getItem('ffx_mode') || 'remnawave';
+    let trafficPeriod = "30d";
     let chartStatus=null, chartNetwork=null, chartNodes=null;
     let loadInFlight = false;
     let openCardId = null;  // ID карточки открытой в модале (null = закрыта)
@@ -426,20 +440,97 @@
     let wsReconnectTimer = null;
     let wsReconnectDelay = 1000;
     let wsFailCount = 0;
+    let lastWsMessageAt = 0;
+    let wsShouldReconnect = false;
     // Polling fallback (используется только если WS недоступен)
     let autoRefreshTimer = null;
     const autoRefreshMs = 10000;
     let violatorSel = new Set();
     let banSel = new Set();
+    let usersSel = new Set();
+    const TREND_MAX_POINTS = 60;
+    const trendHistory = { timestamps: [], activeUsers: [], violators: [], bans: [] };
+    let chartTrend = null;
     const logFilters = new Set(['block','violation','pending','info']);
     const prevStatVals = {};
+    const BAN_SPIKE_THRESHOLD = 3;
+    const QUEUE_SPIKE_THRESHOLD = 15;
+    const QUEUE_HIGH_THRESHOLD = 80;
+    const ALERT_HISTORY_SIZE = 20;
+    const alertHistory = { bans: [], queue: [] };
+    let apiHealth = { down: false, since: 0, message: "" };
+    let nodeDrawerRef = "";
+    let nodeSshSelection = new Set();
+    let nodeSshActiveKey = "";
+    let nodeSshLastResults = [];
+    let nodeSshRunning = false;
+    let nodeSshLiveExecId = "";
+    let nodeSshLiveHeader = "";
+    let nodeSshLiveNodes = {};
+    let nodeSshCreds = {};   // nodeKey -> {user, has_password, has_private_key}
+    let credModalNodeKey = "";
+    let ansiUp = null;
+    const NODE_TREND_WINDOW_MS = 60 * 60 * 1000;
+    const NODE_TREND_MAX_POINTS = 360;
+    const nodeTrendHistory = new Map();
+    const TABLE_SKELETON_LAYOUT = {
+      tbHotUsers: 7,
+      tbUsers: 11,
+      tbTraffic: 12,
+      tbViolators: 7,
+      tbBan: 7,
+      tbActiveBans: 6,
+      tbPermBan: 6,
+      tbNet: 5,
+      tbShared: 3,
+      tbLogs: 6,
+      tbHwid: 4
+    };
+    const CONFIG_EDIT_SCHEMA = [
+      {key:"max_ips_per_user", label:"Макс. IP на пользователя", type:"int", min:1, max:100},
+      {key:"block_duration", label:"Длительность блокировки", type:"duration"},
+      {key:"user_ip_ttl_seconds", label:"TTL IP пользователя (сек)", type:"int", min:1},
+      {key:"clear_ips_delay_seconds", label:"Задержка очистки IP (сек)", type:"int", min:1},
+      {key:"sharing_detection_enabled", label:"Обнаружение шаринга", type:"bool"},
+      {key:"trigger_count", label:"Порог триггеров", type:"int", min:1, max:100},
+      {key:"trigger_period_seconds", label:"Период триггеров (сек)", type:"int", min:1},
+      {key:"trigger_min_interval_seconds", label:"Мин. интервал триггеров (сек)", type:"int", min:1},
+      {key:"sharing_sustain_seconds", label:"Sustain шаринга (сек)", type:"int", min:1},
+      {key:"banlist_threshold_seconds", label:"Порог для бан-листа (сек)", type:"int", min:1},
+      {key:"sharing_source_window_seconds", label:"Окно источников шаринга (сек)", type:"int", min:1},
+      {key:"subnet_grouping", label:"Группировка по /24", type:"bool"},
+      {key:"sharing_block_on_banlist_only", label:"Блок только по бан-листу", type:"bool"},
+      {key:"sharing_block_on_violator_only", label:"Блок только нарушителей", type:"bool"},
+      {key:"sharing_hardware_guard", label:"Hardware Guard", type:"bool"},
+      {key:"sharing_permanent_ban_enabled", label:"Перманентный бан (шаринг)", type:"bool"},
+      {key:"sharing_permanent_ban_duration", label:"Длительность перм. бана", type:"duration"},
+      {key:"ban_escalation_enabled", label:"Эскалация банов", type:"bool"},
+      {key:"ban_escalation_durations", label:"Ступени эскалации", type:"list"},
+      {key:"geo_sharing_enabled", label:"Гео-шаринг", type:"bool"},
+      {key:"geo_sharing_min_countries", label:"Мин. стран для гео-бана", type:"int", min:1},
+      {key:"network_policy_enabled", label:"Политика сети", type:"bool"},
+      {key:"network_mobile_grace_ips", label:"Grace IP для mobile", type:"int", min:0},
+      {key:"network_force_block_excess_ips", label:"Принудительный блок при превышении (IP)", type:"int", min:0},
+      {key:"heuristics_enabled", label:"Heuristics", type:"bool"},
+      {key:"heuristics_window_seconds", label:"Окно heuristics (сек)", type:"int", min:1},
+      {key:"node_heartbeat_timeout_seconds", label:"Таймаут heartbeat ноды (сек)", type:"int", min:1},
+      {key:"prometheus_enabled", label:"Prometheus метрики", type:"bool"}
+    ];
 
     const $ = id => document.getElementById(id);
     const esc = s => String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+    const normNodeKey = v => String(v || "").trim().toLowerCase();
+    const semanticBadge = (kind, text, extra="") => `<span class="badge st-${kind}${extra ? ` ${extra}` : ""}">${esc(text)}</span>`;
     const netTypeName = t => { const tp=String(t||"unknown").toLowerCase(); if(tp==="mobile")return"Сотовый"; if(tp==="wifi")return"Wi-Fi"; if(tp==="cable")return"Кабельный"; return"Неизвестно"; };
     const isBadDate = d => Number.isNaN(d.getTime()) || d.getUTCFullYear() < 2000 || d.getTime() > Date.now() + 5*60*1000;
     const api = async (url, opts={}) => {
-      const r = await fetch(url,{credentials:"include",headers:{"Content-Type":"application/json",...(opts.headers||{})},...opts});
+      const { headers: extraHeaders = {}, ...restOpts } = opts || {};
+      const r = await fetch(url,{
+        credentials:"include",
+        cache:"no-store",
+        headers:{"Content-Type":"application/json",...extraHeaders},
+        ...restOpts
+      });
       if(!r.ok){
         let msg = `HTTP ${r.status}`;
         try{ const j=await r.json(); msg=j.error||j.message||msg; }catch{}
@@ -463,20 +554,6 @@
       done(){ const el=$("progressTop"); if(!el) return; el.style.width="100%"; clearTimeout(this._tmr); this._tmr=setTimeout(()=>{ el.style.opacity="0"; setTimeout(()=>{ el.style.width="0"; el.style.opacity="1"; },300); },300); }
     };
 
-    function setMode(mode){
-      appMode = mode;
-      localStorage.setItem('ffx_mode', mode);
-      document.querySelectorAll('.mode-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.mode === mode);
-      });
-      load(false);
-    }
-    
-    document.querySelectorAll('.mode-btn').forEach(b => {
-      b.onclick = () => setMode(b.dataset.mode);
-    });
-    // Init mode UI
-    setMode(appMode);
     const countByTypes = (events, types) => {
       const set = new Set(types || []);
       return (events || []).filter(e => set.has(String(e?.type || ""))).length;
@@ -521,13 +598,15 @@
     const displayName = u => (u.username && String(u.username).trim()) ? String(u.username).trim() : String(u.user_identifier ?? "");
     const sub = ip => { const p=String(ip).split("."); return p.length===4?`${p[0]}.${p[1]}.${p[2]}.0/24`:ip; };
     const renderActivityBadge = online => online
-      ? '<span class="badge b-green status-primary">Онлайн</span>'
-      : '<span class="badge status-primary">Оффлайн</span>';
+      ? semanticBadge("online", "Онлайн", "status-primary")
+      : semanticBadge("offline", "Оффлайн", "status-primary");
+    const emptyRow = (colspan, icon, title, sub="") =>
+      `<tr><td colspan="${colspan}" class="tbl-empty"><span class="tbl-empty-icon">${icon}</span><p class="tbl-empty-title">${title}</p>${sub?`<p class="tbl-empty-sub">${sub}</p>`:""}</td></tr>`;
     const renderSafetyBadge = exceeds => exceeds
-      ? '<span class="badge b-red status-primary">Нарушение</span>'
-      : '<span class="badge b-green status-primary">Норма</span>';
+      ? semanticBadge("warn", "Нарушение", "status-primary")
+      : semanticBadge("online", "Норма", "status-primary");
     const renderStatusBadge = u => {
-      if (u && u.blocked) return '<span class="badge b-red status-primary">Заблокирован</span>';
+      if (u && u.blocked) return semanticBadge("offline", "Заблокирован", "status-primary");
       return renderSafetyBadge(!!u?.exceeds);
     };
     const renderUserCell = (userId, explicitName="") => {
@@ -551,10 +630,121 @@
         };
       });
     };
+    function skelCell(width="70%"){
+      return `<span class="skel skel-line" style="width:${width}"></span>`;
+    }
+
+    function renderTableSkeleton(id, cols, rows=6){
+      const el = $(id);
+      if(!el) return;
+      el.innerHTML = Array.from({length: rows}, (_,r)=>`<tr class="skel-row">${
+        Array.from({length: cols}, (_,c)=>`<td>${skelCell(c===0 ? "58%" : (c%2===0 ? "72%" : "46%"))}</td>`).join("")
+      }</tr>`).join("");
+    }
+
+    function showLoadingSkeletons(){
+      ["kUsers","kActive","kViolators","kBanned","kNodes","kQueue"].forEach(id=>{
+        const el = $(id);
+        if(!el) return;
+        el.textContent = "";
+        el.classList.add("skel","skel-num");
+      });
+      const sum = $("nodesSummaryHint");
+      if(sum){
+        sum.textContent = "";
+        sum.classList.add("skel","skel-line");
+      }
+      ["nodesOnlineCount","nodesOfflineCount"].forEach(id=>{
+        const el = $(id);
+        if(!el) return;
+        el.textContent = "";
+        el.classList.add("skel","skel-line");
+      });
+      const nodesCards = $("nodesCards");
+      if(nodesCards){
+        nodesCards.innerHTML = Array.from({length: 4}, ()=>`<article class="node-card skel"><div class="node-head"><div class="node-ident">${skelCell("76px")}</div>${skelCell("60px")}</div><div class="node-kpis"><div class="node-kpi">${skelCell("48px")}${skelCell("50px")}</div><div class="node-kpi">${skelCell("48px")}${skelCell("50px")}</div></div><div class="node-spark-empty skel">${skelCell("60%")}</div><div class="node-foot">${skelCell("100px")}${skelCell("56px")}</div></article>`).join("");
+      }
+      Object.entries(TABLE_SKELETON_LAYOUT).forEach(([id, cols])=>renderTableSkeleton(id, cols));
+    }
+
+    function clearLoadingSkeletons(){
+      document.querySelectorAll(".skel-num").forEach(el=>el.classList.remove("skel","skel-num"));
+      document.querySelectorAll("#nodesSummaryHint, #nodesOnlineCount, #nodesOfflineCount").forEach(el=>el.classList.remove("skel","skel-line"));
+    }
+
+    function updateNodeTrend(rows, onlineUsersByNode, trafficByNode){
+      const now = Date.now();
+      const cutoff = now - NODE_TREND_WINDOW_MS;
+      const active = new Set();
+      rows.forEach(r=>{
+        const nodeLabel = resolveNodeLabel(r.node_name, r.node_id);
+        const key = normNodeKey(nodeLabel);
+        if(!key) return;
+        active.add(key);
+        const history = nodeTrendHistory.get(key) || [];
+        const sample = {
+          ts: now,
+          online: Number(onlineUsersByNode.get(key) || 0),
+          traffic: Number(trafficByNode.get(key) || 0)
+        };
+        const prev = history[history.length-1];
+        if(!prev || (now - prev.ts) > 5000 || prev.online !== sample.online || prev.traffic !== sample.traffic){
+          history.push(sample);
+        }else{
+          prev.ts = sample.ts;
+          prev.online = sample.online;
+          prev.traffic = sample.traffic;
+        }
+        while(history.length && history[0].ts < cutoff) history.shift();
+        if(history.length > NODE_TREND_MAX_POINTS){
+          history.splice(0, history.length - NODE_TREND_MAX_POINTS);
+        }
+        nodeTrendHistory.set(key, history);
+      });
+      for(const [key, history] of nodeTrendHistory.entries()){
+        while(history.length && history[0].ts < cutoff) history.shift();
+        if(!history.length){
+          nodeTrendHistory.delete(key);
+          continue;
+        }
+        if(!active.has(key) && (now - history[history.length-1].ts) > NODE_TREND_WINDOW_MS){
+          nodeTrendHistory.delete(key);
+        }
+      }
+    }
+
+    function nodeSparklineHtml(nodeKey){
+      const history = nodeTrendHistory.get(nodeKey) || [];
+      if(history.length < 2){
+        return `<div class="node-spark-empty">Сбор истории за 60 минут...</div>`;
+      }
+      const w = 228, h = 48, pad = 3;
+      const maxOnline = Math.max(1, ...history.map(p=>Number(p.online||0)));
+      const maxTraffic = Math.max(1, ...history.map(p=>Number(p.traffic||0)));
+      const toPolyline = (selector, maxVal) => history.map((p, i)=>{
+        const x = pad + ((history.length === 1 ? 0 : i/(history.length-1)) * (w - pad*2));
+        const y = h - pad - ((Number(selector(p)||0) / maxVal) * (h - pad*2));
+        return `${x.toFixed(1)},${Math.max(pad,Math.min(h-pad,y)).toFixed(1)}`;
+      }).join(" ");
+      const lineTraffic = toPolyline(p=>p.traffic, maxTraffic);
+      const lineOnline = toPolyline(p=>p.online, maxOnline);
+      return `<div class="node-spark-wrap">
+        <svg class="node-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+          <polyline class="spark-line traffic" points="${lineTraffic}"></polyline>
+          <polyline class="spark-line online" points="${lineOnline}"></polyline>
+        </svg>
+        <div class="node-spark-legend">
+          <span class="node-spark-key"><i class="online"></i>онлайн</span>
+          <span class="node-spark-key"><i class="traffic"></i>трафик</span>
+          <span class="muted">60м</span>
+        </div>
+      </div>`;
+    }
 
     function animateStat(id, value) {
       const el = $(id);
       if (!el) return;
+      el.classList.remove("skel","skel-num");
       const newVal = String(value);
       if (prevStatVals[id] !== undefined && prevStatVals[id] !== newVal) {
         el.classList.remove('stat-anim');
@@ -629,16 +819,32 @@
     }
 
     function connectWS(){
-      if(wsConn) return;
+      if(!wsShouldReconnect || wsConn) return;
       const proto = location.protocol==='https:' ? 'wss' : 'ws';
       wsConn = new WebSocket(`${proto}://${location.host}/api/ws`);
-      wsConn.onopen = ()=>{ wsReconnectDelay=1000; wsFailCount=0; updateWsStatus('connected'); stopAutoRefresh(); };
-      wsConn.onmessage = (e)=>{ try{ const m=JSON.parse(e.data); if(m.type==='refresh') load(true); }catch{} };
+      wsConn.onopen = ()=>{ wsReconnectDelay=1000; wsFailCount=0; lastWsMessageAt=Date.now(); updateWsStatus('connected'); };
+      wsConn.onmessage = (e)=>{
+        lastWsMessageAt=Date.now();
+        try{
+          const m=JSON.parse(e.data);
+          if(m.type==='refresh') liveRefresh();
+          else if(m.type==='node_ssh_stream' || m.type==='node_ssh_stream_done') handleNodeSshWsEvent(m);
+        }catch{}
+      };
       wsConn.onclose = ()=>{
         wsConn=null;
+        if(!wsShouldReconnect){
+          updateWsStatus('polling');
+          return;
+        }
         wsFailCount++;
-        if(wsFailCount>=3){ updateWsStatus('polling'); startAutoRefresh(); }
-        else{ updateWsStatus('reconnecting'); wsReconnectTimer=setTimeout(connectWS, wsReconnectDelay); wsReconnectDelay=Math.min(wsReconnectDelay*2,30000); }
+        updateWsStatus(wsFailCount>=3 ? 'polling' : 'reconnecting');
+        if(wsReconnectTimer) clearTimeout(wsReconnectTimer);
+        wsReconnectTimer=setTimeout(()=>{
+          wsReconnectTimer=null;
+          connectWS();
+        }, wsReconnectDelay);
+        wsReconnectDelay=Math.min(wsReconnectDelay*2,30000);
       };
       wsConn.onerror = ()=>{};
     }
@@ -648,7 +854,9 @@
       autoRefreshTimer = setInterval(async () => {
         if (document.visibilityState !== "visible") return;
         if ($("auth").classList.contains("active")) return;
-        await load(true);
+        const wsHealthy = wsConn && wsConn.readyState === WebSocket.OPEN && (Date.now() - lastWsMessageAt) < autoRefreshMs * 2;
+        if (wsHealthy) return;
+        await liveRefresh();
       }, autoRefreshMs);
     }
 
@@ -661,10 +869,16 @@
     async function checkAuth(){
       try{
         await api("/api/panel/me");
+        wsShouldReconnect = true;
         $("auth").classList.remove("active");
-        await load(true);
+        await load(false);
+        startAutoRefresh();
         connectWS();
       }catch{
+        wsShouldReconnect = false;
+        stopAutoRefresh();
+        if(wsConn){ wsConn.close(); wsConn=null; }
+        if(wsReconnectTimer){ clearTimeout(wsReconnectTimer); wsReconnectTimer=null; }
         $("auth").classList.add("active");
       }
     }
@@ -673,16 +887,19 @@
       $("authMsg").textContent="";
       try{
         await api("/api/panel/login",{method:"POST",body:JSON.stringify({password:$("loginPass").value})});
+        wsShouldReconnect = true;
         $("auth").classList.remove("active");
-        await load(true);
+        await load(false);
+        startAutoRefresh();
         connectWS();
       }catch{
-        $("authMsg").textContent="Неверный пароль";
+        $("authMsg").textContent="Неверный пароль или временная блокировка входа";
       }
     }
 
     async function logout(){
       try{ await api("/api/panel/logout",{method:"POST"}); }catch{}
+      wsShouldReconnect = false;
       stopAutoRefresh();
       if(wsConn){ wsConn.close(); wsConn=null; }
       if(wsReconnectTimer){ clearTimeout(wsReconnectTimer); wsReconnectTimer=null; }
@@ -692,96 +909,85 @@
     async function load(silent=false){
       if (loadInFlight) return;
       loadInFlight = true;
-      if(!silent) progressBar.start();
+      if(!silent){
+        showLoadingSkeletons();
+        progressBar.start();
+      }
       try{
-        if (appMode === '3xui') {
-           // 3x-ui Data Fetching
-           const [u3, s3, l, ab, sb, ps, nh, nt, cd, si] = await Promise.all([
-             api("/api/3xui/users?online_only=true"),
-             api("/api/3xui/servers").catch(()=>[]),
-             api("/api/logs?limit=500").catch(()=>[]),
-             api("/api/bans/active?limit=2000").catch(()=>[]),
-             api("/api/banlist/users?limit=2000").catch(()=>[]),
-             api("/api/sharing/permanent?limit=2000").catch(()=>[]),
-             api("/api/nodes/health").catch(()=>[]),
-             api("/api/networks/types").catch(()=>[]),
-             api("/api/config").catch(()=>({})),
-             api("/api/sysinfo").catch(()=>({}))
-           ]);
-           
-           console.log("Loaded 3x-ui users:", u3 ? u3.length : "null");
-           if(u3 && u3.length > 0) showNotice(`Загружено ${u3.length} пользователей (3x-ui)`, "ok");
-           else showNotice("Внимание: API 3x-ui вернул 0 пользователей", "err");
-
-           // Adapt 3x-ui users to internal format
-           users = u3.map(u => ({
-             user_identifier: u.email, // Use email as ID for blocking
-             username: u.remark || u.email,
-             email: u.email,
-             uuid: u.uuid,
-             limit: u.limit_ip || 0, // IP Limit from 3x-ui
-             traffic_limit: u.limit, // Traffic Limit (bytes)
-             ip_count: u.ip_count || 0,
-             online: !!u.online,
-             blocked: !u.enable,
-             last_node_display: u.server_name,
-             last_seen_at: null, // 3x-ui doesn't give last seen easily
-             traffic_total: u.total,
-             traffic_up: u.up,
-             traffic_down: u.down,
-             expiry_time: u.expiry_time,
-             is_3xui: true
-           }));
-           
-           // Mock stats from aggregated data
-           stats = {
-             active_users_count: users.filter(u=>u.online).length,
-             total_users: users.length,
-             violators_count: 0, // Need logic
-             banned_count: users.filter(u=>u.blocked).length
-           };
-           nodes = s3.map(s => ({ id: s.name, name: s.name }));
-           logs = l;
-           activeBans = ab;
-           sharingBanUsers = sb;
-           permanentSharers = ps;
-           nodeHealth = s3.map(s => ({
-             node_name: s.name,
-             online: s.status === 'online',
-             last_traffic_at: s.status === 'online' ? new Date().toISOString() : null
-           }));
-           networkTypes = nt;
-           cfgData = cd;
-           sysinfo = si;
-
-        } else {
-          // Remnawave Data Fetching (Original)
-          [stats, users, nodes, logs, activeBans, sharingBanUsers, permanentSharers, nodeHealth, networkTypes, cfgData, sysinfo] = await Promise.all([
-            api("/api/stats"),
-            api("/api/users?limit=2000&panel_only=true"),
-            api("/api/nodes").catch(()=>[]),
-            api("/api/logs?limit=500").catch(()=>[]),
-            api("/api/bans/active?limit=2000").catch(()=>[]),
-            api("/api/banlist/users?limit=2000").catch(()=>[]),
-            api("/api/sharing/permanent?limit=2000").catch(()=>[]),
-            api("/api/nodes/health").catch(()=>[]),
-            api("/api/networks/types").catch(()=>[]),
-            api("/api/config").catch(()=>({})),
-            api("/api/sysinfo").catch(()=>({}))
-          ]);
-          console.log("Loaded Remnawave users:", users ? users.length : "null");
-          if(users && users.length === 0) showNotice("Внимание: API вернул 0 пользователей", "warn");
+        [stats, users, trafficData, nodes, logs, activeBans, sharingBanUsers, permanentSharers, nodeHealth, networkTypes, cfgData, sysinfo] = await Promise.all([
+          api("/api/stats"),
+          api("/api/users?limit=2000&panel_only=true"),
+          api(`/api/traffic/users?period=${encodeURIComponent(trafficPeriod)}&online_only=true`).catch(()=>({rows:[],summary:{},filters:{},meta:{}})),
+          api("/api/nodes").catch(()=>[]),
+          api("/api/logs?limit=500").catch(()=>[]),
+          api("/api/bans/active?limit=2000").catch(()=>[]),
+          api("/api/banlist/users?limit=2000").catch(()=>[]),
+          api("/api/sharing/permanent?limit=2000").catch(()=>[]),
+          api("/api/nodes/health").catch(()=>[]),
+          api("/api/networks/types").catch(()=>[]),
+          api("/api/config").catch(()=>({})),
+          api("/api/sysinfo").catch(()=>({}))
+        ]);
+        console.log("Loaded users:", users ? users.length : "null");
+        if(users && users.length === 0) showNotice("Внимание: API вернул 0 пользователей", "warn");
+        if(trafficData && trafficData.meta && trafficData.meta.selected_period){
+          trafficPeriod = String(trafficData.meta.selected_period || trafficPeriod);
         }
-        
+        markApiHealthy();
         render();
         if (openCardId && $("modal").classList.contains("active")) {
           refreshOpenCard();
         }
+        if (nodeDrawerRef) {
+          renderNodeDrawer(nodeDrawerRef, true);
+        }
       }catch(e){
+        markApiDown(e);
         if (!silent) showNotice("Ошибка загрузки API: "+e.message, "err");
       } finally {
         loadInFlight = false;
-        if(!silent) progressBar.done();
+        if(!silent){
+          clearLoadingSkeletons();
+          progressBar.done();
+        }
+      }
+    }
+
+    async function liveRefresh(){
+      if (loadInFlight) return;
+      loadInFlight = true;
+      try{
+        const prev = {
+          stats, users, trafficData, nodes, logs, activeBans, sharingBanUsers,
+          permanentSharers, nodeHealth, networkTypes, sysinfo
+        };
+        const next = await Promise.all([
+          api("/api/stats"),
+          api("/api/users?limit=2000&panel_only=true"),
+          api(`/api/traffic/users?period=${encodeURIComponent(trafficPeriod)}&online_only=true`).catch(()=>trafficData),
+          api("/api/nodes").catch(()=>nodes),
+          api("/api/logs?limit=500").catch(()=>logs),
+          api("/api/bans/active?limit=2000").catch(()=>activeBans),
+          api("/api/banlist/users?limit=2000").catch(()=>sharingBanUsers),
+          api("/api/sharing/permanent?limit=2000").catch(()=>permanentSharers),
+          api("/api/nodes/health").catch(()=>nodeHealth),
+          api("/api/networks/types").catch(()=>networkTypes),
+          api("/api/sysinfo").catch(()=>sysinfo)
+        ]);
+
+        [stats, users, trafficData, nodes, logs, activeBans, sharingBanUsers, permanentSharers, nodeHealth, networkTypes, sysinfo] = next;
+        markApiHealthy();
+        applyLivePatch(prev);
+        if (openCardId && $("modal").classList.contains("active")) {
+          refreshOpenCard();
+        }
+        if (nodeDrawerRef) {
+          renderNodeDrawer(nodeDrawerRef, true);
+        }
+      }catch(e){
+        markApiDown(e);
+      } finally {
+        loadInFlight = false;
       }
     }
 
@@ -795,7 +1001,7 @@
 
     const fmtBytes = (b) => {
       if(!b) return "0 B";
-      const units=["B","KB","MB","GB"];
+      const units=["B","KB","MB","GB","TB","PB"];
       let i=0; b=Number(b);
       while(b>=1024&&i<units.length-1){b/=1024;i++;}
       return b.toFixed(i?1:0)+" "+units[i];
@@ -899,30 +1105,179 @@
       return m+"м";
     }
 
-    function render(){
-      const viol = users.filter(u=>u.exceeds);
+    function collectDashboardMeta(srcUsers=users, srcStats=stats, srcNodeHealth=nodeHealth){
+      const safeUsers = Array.isArray(srcUsers) ? srcUsers : [];
+      const safeNodeHealth = Array.isArray(srcNodeHealth) ? srcNodeHealth : [];
+      const viol = safeUsers.filter(u=>u.exceeds);
       const ban = Array.isArray(sharingBanUsers) && sharingBanUsers.length > 0
         ? sharingBanUsers
         : (Array.isArray(activeBans) ? activeBans : []);
-      const nodesSet = new Set((Array.isArray(nodeHealth)?nodeHealth:[]).map(n=>n.node_name).filter(Boolean));
-      const online = users.filter(u=>u.online).length;
-      const queueTotal = (stats.log_queue_len||0) + (stats.side_effect_queue_len||0);
+      const nodesSet = new Set(safeNodeHealth.map(n=>n.node_name).filter(Boolean));
+      const online = safeUsers.filter(u=>u.online).length;
+      const queueTotal = (srcStats.log_queue_len||0) + (srcStats.side_effect_queue_len||0);
+      return {
+        viol,
+        banCount: Number(srcStats.sharing_banlist_users ?? ban.length ?? 0),
+        onlineCount: online,
+        nodeCount: nodesSet.size,
+        queueTotal
+      };
+    }
 
+    function applyDashboardMeta(meta){
       animateStat("kUsers", users.length);
-      animateStat("kActive", online);
-      animateStat("kViolators", viol.length);
-      animateStat("kBanned", stats.sharing_banlist_users ?? ban.length);
-      animateStat("kNodes", nodesSet.size);
-      animateStat("kQueue", queueTotal);
+      animateStat("kActive", meta.onlineCount);
+      animateStat("kViolators", meta.viol.length);
+      animateStat("kBanned", meta.banCount);
+      animateStat("kNodes", meta.nodeCount);
+      animateStat("kQueue", meta.queueTotal);
+    }
 
-      renderNodeFilter();
+    function rememberAlertSample(meta){
+      const bansNow = Number(stats?.real_active_bans ?? stats?.sharing_banlist_users ?? meta?.banCount ?? 0);
+      const queueNow = Number(meta?.queueTotal ?? 0);
+      alertHistory.bans.push(bansNow);
+      alertHistory.queue.push(queueNow);
+      if(alertHistory.bans.length > ALERT_HISTORY_SIZE) alertHistory.bans.splice(0, alertHistory.bans.length - ALERT_HISTORY_SIZE);
+      if(alertHistory.queue.length > ALERT_HISTORY_SIZE) alertHistory.queue.splice(0, alertHistory.queue.length - ALERT_HISTORY_SIZE);
+    }
+
+    function updateTrendSample(meta){
+      const now = new Date();
+      const label = now.toLocaleTimeString("ru-RU", {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+      trendHistory.timestamps.push(label);
+      trendHistory.activeUsers.push(meta.onlineCount || 0);
+      trendHistory.violators.push(meta.viol ? meta.viol.length : 0);
+      trendHistory.bans.push(meta.banCount || 0);
+      if(trendHistory.timestamps.length > TREND_MAX_POINTS){
+        trendHistory.timestamps.shift();
+        trendHistory.activeUsers.shift();
+        trendHistory.violators.shift();
+        trendHistory.bans.shift();
+      }
+      const lbl = $("trendLabel");
+      if(lbl) lbl.textContent = `последние ~${Math.round(trendHistory.timestamps.length * 10 / 60)} мин`;
+    }
+
+    function buildAlerts(meta){
+      const out = [];
+      const now = new Date();
+
+      if(apiHealth.down){
+        out.push({
+          level: "critical",
+          title: "API недоступен",
+          text: apiHealth.message || "Потеряна связь с API.",
+          time: apiHealth.since ? rel(new Date(apiHealth.since).toISOString()) : "сейчас"
+        });
+      }
+
+      const offlineNodes = (Array.isArray(nodeHealth) ? nodeHealth : []).filter(n=>!n.online);
+      if(offlineNodes.length > 0){
+        const names = offlineNodes.slice(0, 4).map(n=>n.node_name || n.node_id).filter(Boolean);
+        const extra = offlineNodes.length > names.length ? ` +${offlineNodes.length - names.length}` : "";
+        out.push({
+          level: "warn",
+          title: "Offline ноды",
+          text: `${offlineNodes.length} нод оффлайн: ${names.join(", ")}${extra}`,
+          time: rel(now.toISOString())
+        });
+      }
+
+      if(alertHistory.bans.length >= 2){
+        const prev = alertHistory.bans[alertHistory.bans.length - 2];
+        const curr = alertHistory.bans[alertHistory.bans.length - 1];
+        const diff = curr - prev;
+        if(diff >= BAN_SPIKE_THRESHOLD){
+          out.push({
+            level: diff >= BAN_SPIKE_THRESHOLD * 2 ? "critical" : "warn",
+            title: "Всплеск банов",
+            text: `Активных банов: ${curr} (рост +${diff} за последний цикл).`,
+            time: rel(now.toISOString())
+          });
+        }
+      }
+
+      if(alertHistory.queue.length >= 2){
+        const prevQ = alertHistory.queue[alertHistory.queue.length - 2];
+        const currQ = alertHistory.queue[alertHistory.queue.length - 1];
+        const diffQ = currQ - prevQ;
+        if(currQ >= QUEUE_HIGH_THRESHOLD || diffQ >= QUEUE_SPIKE_THRESHOLD){
+          out.push({
+            level: currQ >= QUEUE_HIGH_THRESHOLD ? "critical" : "warn",
+            title: "Рост очереди",
+            text: `Очереди: ${currQ} (${diffQ > 0 ? "+"+diffQ : diffQ} за цикл).`,
+            time: rel(now.toISOString())
+          });
+        }
+      }
+
+      if(out.length === 0){
+        out.push({
+          level: "ok",
+          title: "Система стабильна",
+          text: "Критичных сигналов не обнаружено.",
+          time: rel(now.toISOString())
+        });
+      }
+
+      return out;
+    }
+
+    function renderAlertsCenter(meta){
+      const box = $("alertsCenter");
+      const count = $("alertsCount");
+      const updated = $("alertsUpdatedAt");
+      if(!box || !count || !updated) return;
+      const alerts = buildAlerts(meta);
+      const realCount = alerts.filter(a=>a.level!=="ok").length;
+      count.textContent = String(realCount);
+      updated.textContent = `обновлено ${rel(new Date().toISOString())}`;
+      box.innerHTML = alerts.map(a=>`<article class="alert-item ${a.level}">
+        <div class="alert-item-head"><i class="alert-dot"></i><span>${esc(a.title)}</span></div>
+        <div class="alert-text">${esc(a.text)}</div>
+        <div class="alert-foot">${esc(a.time)}</div>
+      </article>`).join("");
+    }
+
+    function markApiDown(err){
+      if(!apiHealth.down){
+        apiHealth.down = true;
+        apiHealth.since = Date.now();
+      }
+      apiHealth.message = String(err?.message || err || "API временно недоступен");
+      const meta = collectDashboardMeta();
+      renderAlertsCenter(meta);
+    }
+
+    function markApiHealthy(){
+      if(apiHealth.down){
+        apiHealth.down = false;
+        apiHealth.since = 0;
+        apiHealth.message = "";
+      }
+    }
+
+    function activePageId(){
+      return document.querySelector(".page.active")?.id || "";
+    }
+
+    function render(){
+      const meta = collectDashboardMeta();
+      applyDashboardMeta(meta);
+      rememberAlertSample(meta);
+      renderAlertsCenter(meta);
+      updateTrendSample(meta);
+
+      renderNodeFilters();
       renderTopNodes();
       renderHotUsers();
       renderUsers();
-      renderViolators(viol);
+      renderTraffic();
+      renderViolators(meta.viol);
       renderBan();
       renderActiveBans();
-      renderPidarasy();
+      renderPermBan();
       renderNet();
       renderShared();
       renderLogs();
@@ -930,6 +1285,13 @@
       renderCharts();
       renderConfig();
       renderSysinfo();
+      if(activePageId() === "p-nodeops"){
+        renderNodeSshNodes();
+      }
+      if(activePageId() === "p-sshterm"){
+        const active = Object.values(sstSessions).find(s=>s.paneEl.classList.contains("active"));
+        if(active?.fitAddon){ try{ active.fitAddon.fit(); }catch(_){} }
+      }
     }
 
     function displayNodeName(raw){
@@ -954,39 +1316,244 @@
       return "unknown";
     }
 
-    function renderTopNodes(){
-      const rows = Array.isArray(nodeHealth) ? nodeHealth : [];
-      const colName = appMode === '3xui' ? 'Сервер' : 'Нода';
-      $("tbTopNodes").innerHTML = rows.map((r,idx)=>`<tr>
-        <td>${idx+1}</td>
-        <td>${esc(r.node_name || r.node_id || "-")}</td>
-        <td>${r.online?'<span class="badge b-green">online</span>':'<span class="badge b-red">offline</span>'}
-          <span class="muted" style="margin-left:6px">${rel(pickValidTime(r.last_traffic_at, r.last_blocker_heartbeat_at, r.last_blocker_action_at))}</span>
-        </td>
-      </tr>`).join("") || `<tr><td colspan="3" class="muted">Нет данных</td></tr>`;
-      
-      const thNode = document.querySelector("#tbTopNodes").closest("table").querySelector("th:nth-child(2)");
-      if(thNode) thNode.textContent = colName;
+    function nodeStableKey(row){
+      const byID = String(row?.node_id || "").trim();
+      if(byID) return byID.toLowerCase();
+      const byName = String(row?.node_name || "").trim();
+      return byName.toLowerCase();
     }
 
-    function renderHotUsers(){
-      const rows = [...users]
+    function nodeAggregates(sourceUsers=users, sourceTraffic=trafficData){
+      const onlineUsersByNode = new Map();
+      (Array.isArray(sourceUsers) ? sourceUsers : []).forEach(u=>{
+        if(!u || !u.online) return;
+        const key = normNodeKey(resolveNodeLabel(u.last_node_display, u.last_node));
+        if(!key || key === "unknown") return;
+        onlineUsersByNode.set(key, (onlineUsersByNode.get(key) || 0) + 1);
+      });
+
+      const trafficByNode = new Map();
+      const trafficRows = Array.isArray(sourceTraffic?.rows) ? sourceTraffic.rows : [];
+      trafficRows.forEach(row=>{
+        const key = normNodeKey(resolveNodeLabel(row?.last_node_display, row?.last_node));
+        if(!key || key === "unknown") return;
+        const used = Number(row?.used_traffic_bytes || 0);
+        trafficByNode.set(key, (trafficByNode.get(key) || 0) + (Number.isFinite(used) ? used : 0));
+      });
+      return {onlineUsersByNode, trafficByNode};
+    }
+
+    function nodeCardDigest(row, onlineUsersByNode, trafficByNode){
+      const nodeKey = normNodeKey(resolveNodeLabel(row?.node_name, row?.node_id) || row?.node_name || row?.node_id || "");
+      const lastSeen = pickValidTime(row?.last_traffic_at, row?.last_blocker_heartbeat_at, row?.last_blocker_action_at);
+      return [
+        String(row?.node_id || ""),
+        String(row?.node_name || ""),
+        row?.online ? "1":"0",
+        String(lastSeen || ""),
+        String(row?.last_traffic_at || ""),
+        String(row?.last_blocker_heartbeat_at || ""),
+        String(row?.last_blocker_action_at || ""),
+        Number(onlineUsersByNode.get(nodeKey) || 0),
+        Number(trafficByNode.get(nodeKey) || 0)
+      ].join("|");
+    }
+
+    function nodeCardHtml(r, onlineUsersByNode, trafficByNode){
+      const uuidRE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const name = String(r.node_name || r.node_id || "unknown");
+      const nodeID = String(r.node_id || "").trim();
+      const showSub = !!nodeID && nodeID !== name && !uuidRE.test(nodeID);
+      const nodeKey = normNodeKey(resolveNodeLabel(r.node_name, r.node_id) || name);
+      const nodeOnlineUsers = onlineUsersByNode.get(nodeKey) || 0;
+      const nodeTrafficBytes = trafficByNode.get(nodeKey) || 0;
+      const lastSeen = pickValidTime(r.last_traffic_at, r.last_blocker_heartbeat_at, r.last_blocker_action_at);
+      return `<article class="node-card ${r.online?'online':'offline'}" tabindex="0" data-node-id="${esc(nodeID)}" data-node-name="${esc(name)}">
+        <div class="node-head">
+          <div class="node-ident">
+            <span class="node-dot"></span>
+            <div>
+              <div class="node-name">${esc(name)}</div>
+              ${showSub ? `<div class="node-sub">${esc(nodeID)}</div>` : ``}
+            </div>
+          </div>
+          ${r.online ? semanticBadge("online", "Онлайн") : semanticBadge("offline", "Оффлайн")}
+        </div>
+        <div class="node-kpis">
+          <div class="node-kpi kpi-online"><div class="node-kpi-label">Онлайн</div><div class="node-kpi-val">${nodeOnlineUsers}</div></div>
+          <div class="node-kpi"><div class="node-kpi-label">Трафик</div><div class="node-kpi-val">${fmtBytes(nodeTrafficBytes)}</div></div>
+        </div>
+        ${nodeSparklineHtml(nodeKey)}
+        <div class="node-foot">
+          <span>Последняя активность</span>
+          <b>${rel(lastSeen)}</b>
+        </div>
+      </article>`;
+    }
+
+    function bindNodeCards(){
+      const wrap = $("nodesCards");
+      if(!wrap) return;
+      wrap.querySelectorAll(".node-card").forEach(card=>{
+        card.onclick = () => openNodeDrawer(card.dataset.nodeId || card.dataset.nodeName || "");
+        card.onkeydown = (e)=>{
+          if(e.key === "Enter" || e.key === " "){
+            e.preventDefault();
+            openNodeDrawer(card.dataset.nodeId || card.dataset.nodeName || "");
+          }
+        };
+      });
+    }
+
+    function renderTopNodes(){
+      const rows = Array.isArray(nodeHealth) ? nodeHealth : [];
+      const online = rows.filter(r=>!!r.online).length;
+      const total = rows.length;
+      const offline = Math.max(0, total - online);
+      $("nodesSummaryHint").textContent = `${online} онлайн / ${total} всего`;
+      $("nodesOnlineCount").textContent = String(online);
+      $("nodesOfflineCount").textContent = String(offline);
+
+      const agg = nodeAggregates(users, trafficData);
+      updateNodeTrend(rows, agg.onlineUsersByNode, agg.trafficByNode);
+      $("nodesCards").innerHTML = rows.map(r=>nodeCardHtml(r, agg.onlineUsersByNode, agg.trafficByNode)).join("") || `<div class="nodes-empty muted">Нет данных по нодам</div>`;
+      bindNodeCards();
+    }
+
+    function patchNodeCards(prev){
+      const prevRows = Array.isArray(prev?.nodeHealth) ? prev.nodeHealth : [];
+      const nextRows = Array.isArray(nodeHealth) ? nodeHealth : [];
+      const cardsWrap = $("nodesCards");
+      if(!cardsWrap){
+        return;
+      }
+
+      const online = nextRows.filter(r=>!!r.online).length;
+      const total = nextRows.length;
+      const offline = Math.max(0, total - online);
+      $("nodesSummaryHint").textContent = `${online} онлайн / ${total} всего`;
+      $("nodesOnlineCount").textContent = String(online);
+      $("nodesOfflineCount").textContent = String(offline);
+
+      const prevAgg = nodeAggregates(prev?.users, prev?.trafficData);
+      const nextAgg = nodeAggregates(users, trafficData);
+      updateNodeTrend(nextRows, nextAgg.onlineUsersByNode, nextAgg.trafficByNode);
+
+      const prevKeys = prevRows.map(nodeStableKey);
+      const nextKeys = nextRows.map(nodeStableKey);
+      if(prevKeys.length !== nextKeys.length || prevKeys.some((k,i)=>k!==nextKeys[i])){
+        renderTopNodes();
+        return;
+      }
+
+      const domCards = Array.from(cardsWrap.querySelectorAll(".node-card"));
+      if(domCards.length !== nextRows.length){
+        renderTopNodes();
+        return;
+      }
+
+      let changed = 0;
+      for(let i=0;i<nextRows.length;i++){
+        const prevDigest = nodeCardDigest(prevRows[i], prevAgg.onlineUsersByNode, prevAgg.trafficByNode);
+        const nextDigest = nodeCardDigest(nextRows[i], nextAgg.onlineUsersByNode, nextAgg.trafficByNode);
+        if(prevDigest !== nextDigest){
+          const tmp = document.createElement("div");
+          tmp.innerHTML = nodeCardHtml(nextRows[i], nextAgg.onlineUsersByNode, nextAgg.trafficByNode);
+          const nextCard = tmp.firstElementChild;
+          if(nextCard){
+            domCards[i].replaceWith(nextCard);
+            changed++;
+          }
+        }
+      }
+
+      if(changed > 0){
+        bindNodeCards();
+      }
+    }
+
+    function hotUsersRowsFrom(sourceUsers=users){
+      const hotNode = $("fHotNode")?.value || "all";
+      return [...(Array.isArray(sourceUsers) ? sourceUsers : [])]
+        .filter(u=>{
+          const node = resolveNodeLabel(u.last_node_display, u.last_node);
+          if(hotNode !== "all" && node !== hotNode) return false;
+          return true;
+        })
         .sort((a,b)=>{
           if((b.blocked?1:0)!==(a.blocked?1:0)) return (b.blocked?1:0)-(a.blocked?1:0);
           if((b.exceeds?1:0)!==(a.exceeds?1:0)) return (b.exceeds?1:0)-(a.exceeds?1:0);
           return (b.ip_count||0)-(a.ip_count||0);
         })
         .slice(0,10);
-      $("tbHotUsers").innerHTML = rows.map(u=>{
-        const node = resolveNodeLabel(u.last_node_display, u.last_node);
-        return `<tr class="row-click" data-u="${esc(u.user_identifier)}"><td><b>${esc(displayName(u))}</b><div class="muted" style="font-size:12px">${esc(u.user_identifier||"")}</div></td><td><span class="badge b-blue">${u.ip_count}</span></td><td>${u.limit}</td><td>${esc(node)}</td><td>${rel(u.last_seen_at || u.heuristics?.last_event_at)}</td><td>${renderStatusBadge(u)}</td><td>${renderActivityBadge(u.online)}</td></tr>`;
-      }).join("") || `<tr><td colspan="7" class="muted">Нет данных</td></tr>`;
+    }
+
+    function hotUserRowHtml(u){
+      const node = resolveNodeLabel(u.last_node_display, u.last_node);
+      return `<tr class="row-click" data-u="${esc(u.user_identifier)}"><td><b>${esc(displayName(u))}</b><div class="muted" style="font-size:12px">${esc(u.user_identifier||"")}</div></td><td><span class="badge b-blue">${u.ip_count}</span></td><td>${u.limit}</td><td>${esc(node)}</td><td>${rel(u.last_seen_at || u.heuristics?.last_event_at)}</td><td>${renderStatusBadge(u)}</td><td>${renderActivityBadge(u.online)}</td></tr>`;
+    }
+
+    function hotUserDigest(u){
+      return [
+        String(u?.user_identifier||""),
+        String(displayName(u)||""),
+        Number(u?.ip_count||0),
+        Number(u?.limit||0),
+        String(u?.last_node_display||u?.last_node||""),
+        String(u?.last_seen_at||u?.heuristics?.last_event_at||""),
+        u?.blocked ? "1":"0",
+        u?.exceeds ? "1":"0",
+        u?.online ? "1":"0"
+      ].join("|");
+    }
+
+    function renderHotUsers(){
+      const rows = hotUsersRowsFrom(users);
+      $("tbHotUsers").innerHTML = rows.map(hotUserRowHtml).join("") || emptyRow(7, "◈", "Нет горячих пользователей", "Самые активные пользователи появятся здесь");
       $("tbHotUsers").querySelectorAll("tr.row-click").forEach(tr=>tr.onclick=()=>openUser(tr.dataset.u));
     }
 
-    function renderNodeFilter(){
-      const sel = $("fNode");
-      const prev = sel.value || "all";
+    function patchHotUsers(prevUsers){
+      const prevRows = hotUsersRowsFrom(prevUsers);
+      const nextRows = hotUsersRowsFrom(users);
+      const tbody = $("tbHotUsers");
+      const domRows = Array.from(tbody?.querySelectorAll("tr.row-click") || []);
+      if(!tbody || domRows.length !== nextRows.length){
+        renderHotUsers();
+        return;
+      }
+
+      for(let i=0;i<nextRows.length;i++){
+        const prevKey = String(prevRows[i]?.user_identifier||"");
+        const nextKey = String(nextRows[i]?.user_identifier||"");
+        if(prevKey !== nextKey){
+          renderHotUsers();
+          return;
+        }
+      }
+
+      let changed = 0;
+      for(let i=0;i<nextRows.length;i++){
+        if(hotUserDigest(prevRows[i]) !== hotUserDigest(nextRows[i])){
+          const wrap = document.createElement("tbody");
+          wrap.innerHTML = hotUserRowHtml(nextRows[i]);
+          const nextTr = wrap.firstElementChild;
+          if(nextTr){
+            domRows[i].replaceWith(nextTr);
+            changed++;
+          }
+        }
+      }
+      if(changed > 0){
+        $("tbHotUsers").querySelectorAll("tr.row-click").forEach(tr=>tr.onclick=()=>openUser(tr.dataset.u));
+      }
+    }
+
+    function renderNodeFilters(){
+      const selUsers = $("fNode");
+      const selHot = $("fHotNode");
+      const prevUsers = selUsers?.value || "all";
+      const prevHot = selHot?.value || "all";
       const nameSet = new Set();
       (nodes||[]).forEach(n => { if(n && n.name) nameSet.add(String(n.name)); });
       users.forEach(u => {
@@ -994,15 +1561,23 @@
         if(n) nameSet.add(n);
       });
       const sorted = [...nameSet].sort((a,b)=>a.localeCompare(b,"ru"));
-      sel.innerHTML = `<option value="all">Последнее подключение: все</option>` + sorted.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
-      sel.value = sorted.includes(prev) ? prev : "all";
+      const usersOptions = `<option value="all">Последнее подключение: все</option>` + sorted.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+      const hotOptions = `<option value="all">Нода: все</option>` + sorted.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+      if(selUsers){
+        selUsers.innerHTML = usersOptions;
+        selUsers.value = sorted.includes(prevUsers) ? prevUsers : "all";
+      }
+      if(selHot){
+        selHot.innerHTML = hotOptions;
+        selHot.value = sorted.includes(prevHot) ? prevHot : "all";
+      }
     }
 
-    function filteredUsers(){
+    function filteredUsersFrom(sourceUsers=users){
       const q=$("qUser").value.trim().toLowerCase();
       const st=$("fState").value;
       const nf=$("fNode").value;
-      return users.filter(u=>{
+      return (Array.isArray(sourceUsers) ? sourceUsers : []).filter(u=>{
         if(st==="ok" && (u.exceeds || u.blocked)) return false;
         if(st==="bad" && !(u.exceeds && !u.blocked)) return false;
         if(st==="blocked" && !u.blocked) return false;
@@ -1013,45 +1588,1371 @@
       });
     }
 
-    function renderUsers(){
-      const all = filteredUsers();
+    function filteredUsers(){
+      return filteredUsersFrom(users);
+    }
+
+    function usersPageSlice(sourceUsers=users){
+      const all = filteredUsersFrom(sourceUsers);
       const total = all.length;
       const totalPages = Math.max(1, Math.ceil(total / USERS_PAGE_SIZE));
-      if(usersPage >= totalPages) usersPage = totalPages - 1;
-      const start = usersPage * USERS_PAGE_SIZE;
+      const page = Math.min(usersPage, totalPages - 1);
+      const start = page * USERS_PAGE_SIZE;
       const rows = all.slice(start, start + USERS_PAGE_SIZE);
+      return {all, total, totalPages, page, start, rows};
+    }
 
-      $("tbUsers").innerHTML = rows.map((u,i)=>{
-        const name = displayName(u);
-        const idLine = name !== String(u.user_identifier) ? `<div class="muted" style="font-size:12px">${esc(u.user_identifier)}</div>` : "";
-        const activity = u.is_3xui ? (u.traffic_total ? fmtBytes(u.traffic_total) : "-") : rel(u.last_seen_at || u.heuristics?.last_event_at);
-        const sharing = u.sharing || null;
-        const concurrent = sharing ? `${sharing.concurrent_ips}/${sharing.concurrent_limit}` : "-";
-        const triggers = sharing ? `${sharing.trigger_hits}/${sharing.trigger_required}` : "-";
-        const node = resolveNodeLabel(u.last_node_display, u.last_node);
-        const rowCls = u.blocked ? "row-click row-blocked" : (u.exceeds ? "row-click row-violated" : "row-click");
-        const colIp = (u.is_3xui && (!u.ip_count || u.ip_count === 0))
-          ? `<span class="badge b-cyan">API</span>`
-          : `<span class="badge b-blue">${u.ip_count}</span>`;
-        const colLimit = u.is_3xui ? (u.limit ? u.limit : "∞") : `<span class="badge b-amber">${u.limit}</span>`;
-        return `<tr class="${rowCls}" data-u="${esc(u.user_identifier)}"><td>${start+i+1}</td><td><b>${esc(name)}</b>${idLine}</td><td>${colIp}</td><td>${colLimit}</td><td>${esc(concurrent)}</td><td>${esc(triggers)}</td><td>${esc(node)}</td><td>${activity}</td><td>${renderStatusBadge(u)}</td><td>${renderActivityBadge(u.online)}</td></tr>`;
-      }).join("") || `<tr><td colspan="10" class="muted">Нет данных</td></tr>`;
+    function usersRowHtml(u, rowNo){
+      const name = displayName(u);
+      const idLine = name !== String(u.user_identifier) ? `<div class="muted" style="font-size:12px">${esc(u.user_identifier)}</div>` : "";
+      const activity = rel(u.last_seen_at || u.heuristics?.last_event_at);
+      const sharing = u.sharing || null;
+      const concurrent = sharing ? `${sharing.concurrent_ips}/${sharing.concurrent_limit}` : "-";
+      const triggers = sharing ? `${sharing.trigger_hits}/${sharing.trigger_required}` : "-";
+      const node = resolveNodeLabel(u.last_node_display, u.last_node);
+      const rowCls = u.blocked ? "row-click row-blocked" : (u.exceeds ? "row-click row-violated" : "row-click");
+      const colIp = `<span class="badge b-blue">${u.ip_count}</span>`;
+      const colLimit = `<span class="badge b-amber">${u.limit}</span>`;
+      return `<tr class="${rowCls}" data-u="${esc(u.user_identifier)}"><td class="td-check"><input type="checkbox" class="user-cb" data-id="${esc(u.user_identifier)}"></td><td>${rowNo}</td><td><b>${esc(name)}</b>${idLine}</td><td>${colIp}</td><td>${colLimit}</td><td>${esc(concurrent)}</td><td>${esc(triggers)}</td><td>${esc(node)}</td><td>${activity}</td><td>${renderStatusBadge(u)}</td><td>${renderActivityBadge(u.online)}</td></tr>`;
+    }
+
+    function userRowDigest(u){
+      return [
+        String(u?.user_identifier||""),
+        String(displayName(u)||""),
+        Number(u?.ip_count||0),
+        Number(u?.limit||0),
+        String(u?.last_node_display||u?.last_node||""),
+        String(u?.last_seen_at||u?.heuristics?.last_event_at||""),
+        String(u?.sharing?.concurrent_ips||"-"),
+        String(u?.sharing?.concurrent_limit||"-"),
+        String(u?.sharing?.trigger_hits||"-"),
+        String(u?.sharing?.trigger_required||"-"),
+        u?.blocked ? "1":"0",
+        u?.exceeds ? "1":"0",
+        u?.online ? "1":"0"
+      ].join("|");
+    }
+
+    function bindUsersCbs(){
+      $("tbUsers").querySelectorAll(".user-cb").forEach(cb=>{
+        cb.onchange=()=>{
+          if(cb.checked) usersSel.add(cb.dataset.id);
+          else usersSel.delete(cb.dataset.id);
+          updateUsersBulkBar();
+          const allCb = $("usersCheckAll");
+          if(allCb) allCb.checked = false;
+        };
+      });
+    }
+
+    function renderUsers(){
+      usersSel = new Set();
+      updateUsersBulkBar();
+      const page = usersPageSlice(users);
+      usersPage = page.page;
+
+      $("tbUsers").innerHTML = page.rows.map((u,i)=>usersRowHtml(u, page.start+i+1)).join("")
+        || emptyRow(11, "◉", "Нет подключённых пользователей", "Активные пользователи появятся здесь");
       $("tbUsers").querySelectorAll("tr.row-click").forEach(tr=>tr.onclick=()=>openUser(tr.dataset.u));
+      bindUsersCbs();
 
       // Pagination controls
       const pager = $("usersPager");
-      if(total <= USERS_PAGE_SIZE){ pager.innerHTML=""; return; }
-      const from = total ? start+1 : 0, to = Math.min(start+USERS_PAGE_SIZE, total);
-      let btns = `<span class="pager-info">Показано ${from}–${to} из ${total}</span>`;
+      if(page.total <= USERS_PAGE_SIZE){ pager.innerHTML=""; return; }
+      const from = page.total ? page.start+1 : 0, to = Math.min(page.start+USERS_PAGE_SIZE, page.total);
+      let btns = `<span class="pager-info">Показано ${from}–${to} из ${page.total}</span>`;
       btns += `<button class="pager-btn" onclick="usersPage=0;renderUsers()" ${usersPage===0?"disabled":""}>«</button>`;
       btns += `<button class="pager-btn" onclick="usersPage--;renderUsers()" ${usersPage===0?"disabled":""}>‹</button>`;
-      const winStart = Math.max(0, usersPage-2), winEnd = Math.min(totalPages, winStart+5);
+      const winStart = Math.max(0, usersPage-2), winEnd = Math.min(page.totalPages, winStart+5);
       for(let p=winStart;p<winEnd;p++){
         btns += `<button class="pager-btn${p===usersPage?" active":""}" onclick="usersPage=${p};renderUsers()">${p+1}</button>`;
       }
-      btns += `<button class="pager-btn" onclick="usersPage++;renderUsers()" ${usersPage===totalPages-1?"disabled":""}>›</button>`;
-      btns += `<button class="pager-btn" onclick="usersPage=${totalPages-1};renderUsers()" ${usersPage===totalPages-1?"disabled":""}>»</button>`;
+      btns += `<button class="pager-btn" onclick="usersPage++;renderUsers()" ${usersPage===page.totalPages-1?"disabled":""}>›</button>`;
+      btns += `<button class="pager-btn" onclick="usersPage=${page.totalPages-1};renderUsers()" ${usersPage===page.totalPages-1?"disabled":""}>»</button>`;
       pager.innerHTML = btns;
+    }
+
+    function patchUsersTable(prevUsers){
+      const prevPage = usersPageSlice(prevUsers);
+      const nextPage = usersPageSlice(users);
+      const tbody = $("tbUsers");
+      const rowsDom = Array.from(tbody?.querySelectorAll("tr.row-click") || []);
+      if(!tbody){
+        return;
+      }
+
+      if(prevPage.total !== nextPage.total || prevPage.totalPages !== nextPage.totalPages || prevPage.page !== nextPage.page){
+        usersPage = nextPage.page;
+        renderUsers();
+        return;
+      }
+
+      if(rowsDom.length !== nextPage.rows.length){
+        renderUsers();
+        return;
+      }
+
+      for(let i=0;i<nextPage.rows.length;i++){
+        const prevKey = String(prevPage.rows[i]?.user_identifier || "");
+        const nextKey = String(nextPage.rows[i]?.user_identifier || "");
+        if(prevKey !== nextKey){
+          renderUsers();
+          return;
+        }
+      }
+
+      let changed = 0;
+      for(let i=0;i<nextPage.rows.length;i++){
+        const prevDigest = userRowDigest(prevPage.rows[i]);
+        const nextDigest = userRowDigest(nextPage.rows[i]);
+        if(prevDigest !== nextDigest){
+          const wrap = document.createElement("tbody");
+          wrap.innerHTML = usersRowHtml(nextPage.rows[i], nextPage.start+i+1);
+          const nextTr = wrap.firstElementChild;
+          if(nextTr){
+            rowsDom[i].replaceWith(nextTr);
+            changed++;
+          }
+        }
+      }
+
+      if(changed > 0){
+        $("tbUsers").querySelectorAll("tr.row-click").forEach(tr=>tr.onclick=()=>openUser(tr.dataset.u));
+        $("tbUsers").querySelectorAll(".user-cb").forEach(cb=>{
+          cb.checked = usersSel.has(cb.dataset.id);
+          cb.onchange=()=>{
+            if(cb.checked) usersSel.add(cb.dataset.id);
+            else usersSel.delete(cb.dataset.id);
+            updateUsersBulkBar();
+            const allCb = $("usersCheckAll");
+            if(allCb) allCb.checked = false;
+          };
+        });
+      }
+    }
+
+    function applyLivePatch(prev){
+      const meta = collectDashboardMeta();
+      applyDashboardMeta(meta);
+      rememberAlertSample(meta);
+      renderAlertsCenter(meta);
+
+      const page = activePageId();
+      if(page === "p-dashboard"){
+        patchNodeCards(prev);
+        patchHotUsers(prev?.users);
+        updateTrendSample(meta);
+        renderCharts();
+        renderSysinfo();
+      } else if(page === "p-users"){
+        renderNodeFilters();
+        patchUsersTable(prev?.users);
+      } else if(page === "p-traffic"){
+        renderTraffic();
+      } else if(page === "p-violators"){
+        renderViolators(meta.viol);
+      } else if(page === "p-ban"){
+        renderBan();
+      } else if(page === "p-activebans"){
+        renderActiveBans();
+      } else if(page === "p-nodeops"){
+        loadNodeSSHCreds().then(()=>renderNodeSshNodes());
+      } else if(page === "p-sshterm"){
+        renderSshterm();
+        initSstResizeObserver();
+      } else if(page === "p-permanent-ban"){
+        renderPermBan();
+      } else if(page === "p-net"){
+        renderNet();
+      } else if(page === "p-shared"){
+        renderShared();
+      } else if(page === "p-logs"){
+        renderLogs();
+      } else if(page === "p-hwid"){
+        renderHwid();
+      } else if(page === "p-settings"){
+        renderConfig();
+      }
+    }
+
+    function normNodeMatch(v){
+      return String(v || "").trim().toLowerCase();
+    }
+
+    function findNodeRowByRef(ref){
+      const needle = normNodeMatch(ref);
+      if(!needle) return null;
+      const rows = Array.isArray(nodeHealth) ? nodeHealth : [];
+      return rows.find(r=>{
+        const byID = normNodeMatch(r?.node_id);
+        const byName = normNodeMatch(r?.node_name);
+        return needle === byID || needle === byName || (byID && byID.includes(needle)) || (byName && byName.includes(needle));
+      }) || null;
+    }
+
+    function nodeMatchesEvent(nodeRow, eventRow){
+      const nodeKeys = new Set([
+        normNodeMatch(nodeRow?.node_id),
+        normNodeMatch(nodeRow?.node_name)
+      ].filter(Boolean));
+      const eNode = normNodeMatch(eventRow?.node_name);
+      if(!eNode || nodeKeys.size === 0) return false;
+      if(nodeKeys.has(eNode)) return true;
+      for(const k of nodeKeys){
+        if(eNode.includes(k) || k.includes(eNode)) return true;
+      }
+      return false;
+    }
+
+    function isNodeErrorEvent(ev){
+      const tp = String(ev?.type || "").toLowerCase();
+      const msg = String(ev?.message || "").toLowerCase();
+      return tp.includes("error") || tp.includes("fail") || msg.includes("ошиб") || msg.includes("failed");
+    }
+
+    function closeNodeDrawer(){
+      $("nodeDrawer")?.classList.remove("active");
+      nodeDrawerRef = "";
+    }
+
+    function renderNodeDrawer(nodeRef, keepOpen=false){
+      const row = findNodeRowByRef(nodeRef);
+      const drawer = $("nodeDrawer");
+      const body = $("nodeDrawerBody");
+      if(!drawer || !body) return;
+      if(!row){
+        if(!keepOpen) showNotice("Нода не найдена", "err");
+        closeNodeDrawer();
+        return;
+      }
+
+      nodeDrawerRef = String(row.node_id || row.node_name || nodeRef || "");
+      const nodeTitle = String(row.node_name || row.node_id || "Нода");
+      const statusText = row.online ? "online" : "offline";
+      const events = (Array.isArray(logs) ? logs : []).filter(ev=>nodeMatchesEvent(row, ev)).slice(0, 16);
+      const errors = events.filter(isNodeErrorEvent).slice(0, 6);
+      const actions = events.filter(ev=>{
+        const t = String(ev?.type || "").toLowerCase();
+        return t.includes("block") || t.includes("clear") || t.includes("manual") || t.includes("sharing");
+      }).slice(0, 6);
+
+      $("nodeDrawerTitle").textContent = nodeTitle;
+      $("nodeDrawerSub").textContent = `${statusText} • ${row.node_id ? `ID: ${row.node_id}` : "без ID"}`;
+
+      const list = (items, emptyText) => items.length
+        ? `<div class="drawer-list">${items.map(ev=>`<div class="drawer-item"><div class="muted">${t(ev.timestamp)} • ${esc(String(ev.type||"event").toUpperCase())}</div><p>${esc(ev.message || "-")}</p></div>`).join("")}</div>`
+        : `<div class="muted">${emptyText}</div>`;
+
+      body.innerHTML = `
+        <div class="drawer-grid">
+          <div class="drawer-kpi"><span>Статус</span><b>${row.online ? "Онлайн" : "Оффлайн"}</b></div>
+          <div class="drawer-kpi"><span>Последний трафик</span><b>${rel(row.last_traffic_at)}</b></div>
+          <div class="drawer-kpi"><span>Heartbeat</span><b>${rel(row.last_blocker_heartbeat_at)}</b></div>
+          <div class="drawer-kpi"><span>Последнее действие</span><b>${rel(row.last_blocker_action_at)}</b></div>
+        </div>
+        <div class="drawer-actions">
+          <button type="button" class="btn" id="nodeDrawerRefreshBtn">Обновить</button>
+          <button type="button" class="btn" id="nodeDrawerLogsBtn">Логи ноды</button>
+        </div>
+        <section class="drawer-card"><h4>Последние события</h4>${list(events, "По ноде пока нет событий в текущем окне логов.")}</section>
+        <section class="drawer-card"><h4>Последние ошибки</h4>${list(errors, "Ошибки по ноде не найдены.")}</section>
+        <section class="drawer-card"><h4>Действия</h4>${list(actions, "Действий по ноде пока нет.")}</section>
+      `;
+
+      $("nodeDrawerRefreshBtn").onclick = ()=>liveRefresh();
+      $("nodeDrawerLogsBtn").onclick = ()=>{
+        switchPage("logs", "Логи");
+        renderLogs();
+        const rows = Array.from(document.querySelectorAll("#tbLogs tr"));
+        const nodeNeedle = normNodeMatch(nodeTitle);
+        const hit = rows.find(tr=>{
+          const td = tr.children && tr.children[4];
+          return td && normNodeMatch(td.textContent).includes(nodeNeedle);
+        });
+        if(hit){
+          hit.scrollIntoView({behavior:"smooth", block:"center"});
+          hit.style.outline = "1px solid rgba(26,213,240,.65)";
+          setTimeout(()=>{ hit.style.outline = ""; }, 1800);
+        }
+      };
+
+      if(!keepOpen){
+        drawer.classList.add("active");
+      }
+    }
+
+    function openNodeDrawer(nodeRef){
+      renderNodeDrawer(nodeRef, false);
+    }
+
+    function nodeSshNodeKey(node){
+      const id = String(node?.id || "").trim();
+      if(id) return id;
+      return String(node?.name || "").trim();
+    }
+
+    function nodeSshRows(){
+      const healthRows = Array.isArray(nodeHealth) ? nodeHealth : [];
+      const healthBy = new Map();
+      healthRows.forEach(h=>{
+        const name = String(h?.node_name || "").trim().toLowerCase();
+        const id = String(h?.node_id || "").trim().toLowerCase();
+        if(name) healthBy.set(name, !!h.online);
+        if(id) healthBy.set(id, !!h.online);
+      });
+
+      const rows = (Array.isArray(nodes) ? nodes : []).map(n=>{
+        const key = nodeSshNodeKey(n);
+        const id = String(n?.id || "").trim();
+        const name = String(n?.name || id || "").trim() || "unknown";
+        const address = String(n?.address || "").trim();
+        const online = healthBy.get(id.toLowerCase()) ?? healthBy.get(name.toLowerCase()) ?? false;
+        const sshEnabled = !!n?.ssh_enabled;
+        const selectable = !!address;
+        return {key, id, name, address, online, sshEnabled, selectable};
+      }).filter(r=>r.key);
+
+      rows.sort((a,b)=>{
+        if(a.online !== b.online) return a.online ? -1 : 1;
+        return a.name.localeCompare(b.name, "ru");
+      });
+      return rows;
+    }
+
+    function syncNodeSshSelection(rows){
+      const valid = new Set(rows.map(r=>r.key));
+      nodeSshSelection = new Set([...nodeSshSelection].filter(k=>valid.has(k)));
+      if(nodeSshActiveKey && !valid.has(nodeSshActiveKey)){
+        nodeSshActiveKey = "";
+      }
+      if(!nodeSshActiveKey && nodeSshSelection.size === 1){
+        nodeSshActiveKey = [...nodeSshSelection][0];
+      }
+    }
+
+    function nodeSshSelectedRows(rows){
+      return rows.filter(r=>nodeSshSelection.has(r.key) && r.selectable);
+    }
+
+    function nodeSshActiveRow(rows){
+      const byKey = rows.find(r=>r.key === nodeSshActiveKey && r.selectable);
+      if(byKey) return byKey;
+      const selected = nodeSshSelectedRows(rows);
+      if(selected.length === 1) return selected[0];
+      return null;
+    }
+
+    function renderNodeSshCounter(rows){
+      const el = $("nodeSshCounter");
+      if(!el) return;
+      el.textContent = `Выбрано: ${nodeSshSelectedRows(rows).length}`;
+    }
+
+    function nodeSshHasLiveOutput(){
+      if(nodeSshLiveExecId) return true;
+      return Object.keys(nodeSshLiveNodes || {}).length > 0;
+    }
+
+    function nodeSshHasRenderedOutput(){
+      const box = $("nodeSshOutput");
+      if(!box) return false;
+      return !!box.querySelector(".term-terminal, .term-block");
+    }
+
+    function renderNodeSshEmptyState(rows){
+      if(nodeSshLastResults.length > 0 || nodeSshHasLiveOutput() || nodeSshHasRenderedOutput()) return;
+      const box = $("nodeSshOutput");
+      if(!box) return;
+
+      const selected = nodeSshSelectedRows(rows);
+      const active = nodeSshActiveRow(rows);
+      if(selected.length > 1){
+        box.innerHTML = `<div class="term-empty">Массовый режим: выбрано ${selected.length} нод. Введите команду в блоке "Команда (массово)".</div>`;
+        return;
+      }
+      if(active){
+        box.innerHTML = `<div class="term-empty">Терминал ноды ${esc(active.name)} открыт. Введите команду и нажмите "Выполнить на ноде".</div>`;
+        return;
+      }
+      box.innerHTML = `<div class="term-empty">Нажмите на ноду слева, чтобы открыть терминал.</div>`;
+    }
+
+    function renderNodeSshMode(rows){
+      const selected = nodeSshSelectedRows(rows);
+      const active = nodeSshActiveRow(rows);
+      const multi = selected.length > 1;
+
+      const singlePanel = $("nodeSshSinglePanel");
+      const multiPanel = $("nodeSshMultiPanel");
+      if(singlePanel) singlePanel.classList.toggle("nodeops-panel-hide", multi);
+      if(multiPanel) multiPanel.classList.toggle("nodeops-panel-hide", !multi);
+
+      const title = $("nodeSshOutputTitle");
+      if(title){
+        title.textContent = multi
+          ? `Терминал (${selected.length} нод)`
+          : (active ? `Терминал: ${active.name}` : "Терминал");
+      }
+
+      const singleTitle = $("nodeSshSingleTitle");
+      if(singleTitle){
+        singleTitle.textContent = active ? `Терминал ноды: ${active.name}` : "Терминал ноды";
+      }
+
+      const singleHint = $("nodeSshSingleHint");
+      if(singleHint){
+        singleHint.textContent = active
+          ? `Нода: ${active.name}${active.address ? ` (${active.address})` : ""}`
+          : "Нажмите на ноду слева, чтобы открыть терминал.";
+      }
+
+      const runSingle = $("nodeSshRunSingle");
+      if(runSingle){
+        runSingle.disabled = nodeSshRunning || !active;
+      }
+
+      const runMulti = $("nodeSshRun");
+      if(runMulti){
+        runMulti.disabled = nodeSshRunning || !multi;
+      }
+
+      const multiSummary = $("nodeSshSummary");
+      if(multiSummary && multi){
+        multiSummary.textContent = `Массовый режим: выбрано ${selected.length} нод.`;
+      }
+
+      renderNodeSshEmptyState(rows);
+    }
+
+    function renderNodeSshNodes(){
+      const box = $("nodeSshList");
+      if(!box) return;
+      const rows = nodeSshRows();
+      syncNodeSshSelection(rows);
+      renderNodeSshCounter(rows);
+
+      if(rows.length === 0){
+        box.innerHTML = `<div class="term-empty">Список нод недоступен.</div>`;
+        renderNodeSshMode(rows);
+        return;
+      }
+
+      const active = nodeSshActiveRow(rows);
+      const activeKey = active ? active.key : "";
+
+      box.innerHTML = rows.map(r=>{
+        const cred = nodeSshCreds[r.key];
+        const hasCreds = !!cred;
+        const credKinds = [];
+        if(cred?.has_password) credKinds.push("password");
+        if(cred?.has_private_key) credKinds.push("key");
+        const credTitle = cred ? `Creds: ${cred.user || ""}${credKinds.length ? ` (${credKinds.join("+")})` : ""}` : "";
+        const credDot = hasCreds ? `<i class="nodeops-cred-dot" title="${esc(credTitle)}"></i>` : "";
+        return `<div class="nodeops-item ${activeKey === r.key ? "active" : ""}">
+        <input type="checkbox" class="nodeSshNodeCb" data-key="${esc(r.key)}" ${nodeSshSelection.has(r.key) ? "checked" : ""} ${!r.selectable ? "disabled" : ""}>
+        <button type="button" class="nodeops-open nodeSshOpenBtn" data-key="${esc(r.key)}" ${!r.selectable ? "disabled" : ""}>
+          <i class="nodeops-dot ${r.online ? "on" : "off"}"></i>
+          <div class="nodeops-meta">
+            <div style="display:flex;align-items:center;gap:5px">${credDot}<span class="nodeops-name">${esc(r.name)}</span></div>
+            <span class="nodeops-addr">${esc(r.address || "нет address в панели")}</span>
+          </div>
+        </button>
+        <span class="nodeops-badge">${!r.selectable ? "no address" : (!r.sshEnabled ? "ssh off" : (r.online ? "online" : "offline"))}</span>
+        <button type="button" class="nodeops-gear nodeSshGearBtn" data-key="${esc(r.key)}" data-name="${esc(r.name)}" title="SSH credentials">⚙</button>
+      </div>`;
+      }).join("");
+
+      box.querySelectorAll(".nodeSshNodeCb").forEach(cb=>{
+        cb.onchange = ()=>{
+          const key = String(cb.dataset.key || "");
+          if(!key) return;
+          if(cb.checked){
+            nodeSshSelection.add(key);
+            if(nodeSshSelection.size === 1){
+              nodeSshActiveKey = key;
+            }
+          } else {
+            nodeSshSelection.delete(key);
+            if(nodeSshActiveKey === key){
+              nodeSshActiveKey = nodeSshSelection.size === 1 ? [...nodeSshSelection][0] : "";
+            }
+          }
+          renderNodeSshNodes();
+        };
+      });
+
+      box.querySelectorAll(".nodeSshOpenBtn").forEach(btn=>{
+        btn.onclick = (e)=>{
+          e.preventDefault();
+          const key = String(btn.dataset.key || "");
+          if(!key) return;
+          nodeSshActiveKey = key;
+          nodeSshSelection = new Set([key]);
+          renderNodeSshNodes();
+        };
+      });
+
+      box.querySelectorAll(".nodeSshGearBtn").forEach(btn=>{
+        btn.onclick = (e)=>{
+          e.preventDefault();
+          e.stopPropagation();
+          openNodeCredModal(String(btn.dataset.key||""), String(btn.dataset.name||""));
+        };
+      });
+
+      renderNodeSshMode(rows);
+    }
+
+    function nodeSshSelect(mode){
+      const rows = nodeSshRows();
+      if(mode === "all"){
+        nodeSshSelection = new Set(rows.filter(r=>r.selectable).map(r=>r.key));
+      } else if(mode === "online"){
+        nodeSshSelection = new Set(rows.filter(r=>r.selectable && r.online).map(r=>r.key));
+      } else {
+        nodeSshSelection = new Set();
+      }
+      if(nodeSshSelection.size === 0){
+        nodeSshActiveKey = "";
+      } else if(nodeSshSelection.size === 1){
+        nodeSshActiveKey = [...nodeSshSelection][0];
+      } else if(!nodeSshSelection.has(nodeSshActiveKey)){
+        nodeSshActiveKey = [...nodeSshSelection][0];
+      }
+      renderNodeSshNodes();
+    }
+
+    function ansiToHtml(text){
+      const raw = String(text || "");
+      if(raw === "") return "";
+      if(!ansiUp && window.AnsiUp){
+        ansiUp = new window.AnsiUp();
+      }
+      if(ansiUp && typeof ansiUp.ansi_to_html === "function"){
+        return ansiUp.ansi_to_html(raw).replace(/\n/g, "<br>");
+      }
+      return esc(raw).replace(/\n/g, "<br>");
+    }
+
+    function normalizeSshError(raw){
+      const msg = String(raw || "").trim();
+      if(!msg) return "";
+      const low = msg.toLowerCase();
+      if(low.includes("unable to authenticate") || low.includes("no supported methods remain")){
+        return `${msg}\nПодсказка: кликните ⚙ рядом с нодой и задайте user/password, либо проверьте глобальный NODE_SSH_USER/NODE_SSH_PASSWORD.`;
+      }
+      if(low.includes("connection refused") || low.includes("i/o timeout") || low.includes("no route to host")){
+        return `${msg}\nПодсказка: проверьте address:port ноды и сетевую доступность с сервера панели.`;
+      }
+      return msg;
+    }
+
+    function initNodeSshLive(execId, command){
+      nodeSshLiveExecId = String(execId || "").trim();
+      nodeSshLiveHeader = String(command || "").trim();
+      nodeSshLiveNodes = {};
+      if(!nodeSshLiveExecId) return;
+      const box = $("nodeSshOutput");
+      if(box){
+        box.innerHTML = `<div class="term-terminal">
+          <div class="term-headline">
+            <span class="term-host">ffxban@panel</span>
+            <span class="term-time">${esc(new Date().toLocaleTimeString("ru-RU", {hour12:false}))}</span>
+          </div>
+          <div class="term-command"><span class="sym">$</span> ${esc(nodeSshLiveHeader || "command")}</div>
+          <div class="term-empty">Ожидание первого вывода...</div>
+        </div>`;
+      }
+    }
+
+    function renderNodeSshLive(){
+      if(!nodeSshLiveExecId) return;
+      const box = $("nodeSshOutput");
+      const summary = $("nodeSshSummary");
+      const hint = $("nodeSshSingleHint");
+      if(!box) return;
+
+      const entries = Object.values(nodeSshLiveNodes || {});
+      const total = entries.length;
+      const done = entries.filter(n=>n.done).length;
+      const ok = entries.filter(n=>n.done && n.ok).length;
+      const fail = entries.filter(n=>n.done && !n.ok).length;
+
+      if(summary){
+        summary.textContent = `Выполнение: ${done}/${total || "?"} • OK: ${ok} • FAIL: ${fail}`;
+      }
+      if(hint){
+        hint.textContent = summary?.textContent || hint.textContent;
+      }
+
+      if(total === 0){
+        box.innerHTML = `<div class="term-terminal">
+          <div class="term-headline">
+            <span class="term-host">ffxban@panel</span>
+            <span class="term-time">${esc(new Date().toLocaleTimeString("ru-RU", {hour12:false}))}</span>
+          </div>
+          <div class="term-command"><span class="sym">$</span> ${esc(nodeSshLiveHeader || "command")}</div>
+          <div class="term-empty">Ожидание первого вывода...</div>
+        </div>`;
+        return;
+      }
+
+      const items = entries.map(node=>{
+        const body = ansiToHtml((node.lines || []).join("\n"));
+        const errHtml = node.error ? `<div class="stderr">${esc(normalizeSshError(node.error)).replace(/\n/g,"<br>")}</div>` : "";
+        const code = Number(node.exitCode);
+        const duration = Number(node.durationMs || 0);
+        return `<article class="term-block ${node.done ? (node.ok ? "ok" : "fail") : ""}">
+          <div class="term-head">
+            <div class="term-title"><i class="nodeops-dot ${node.done ? (node.ok ? "on" : "off") : "warn"}"></i><b>${esc(node.nodeName || node.nodeKey || "node")}</b></div>
+            <div class="term-meta">${node.done ? `exit ${Number.isFinite(code) ? code : "-"} • ${duration} ms` : "running..."}</div>
+          </div>
+          <div class="term-box">${body || "<span class='muted'>пустой вывод</span>"}${errHtml ? `<br>${errHtml}` : ""}</div>
+        </article>`;
+      }).join("");
+
+      box.innerHTML = `<div class="term-terminal">
+        <div class="term-headline">
+          <span class="term-host">ffxban@panel</span>
+          <span class="term-time">${esc(new Date().toLocaleTimeString("ru-RU", {hour12:false}))}</span>
+        </div>
+        <div class="term-command"><span class="sym">$</span> ${esc(nodeSshLiveHeader || "command")}</div>
+        ${items}
+      </div>`;
+    }
+
+    function showNodeSshTransportError(message){
+      const msg = String(message || "").trim();
+      if(!msg) return;
+      const box = $("nodeSshOutput");
+      if(!box) return;
+      const terminal = box.querySelector(".term-terminal");
+      const html = `<div class="stderr">Транспортная ошибка API: ${esc(msg)}</div>`;
+      if(!terminal){
+        box.innerHTML = `<div class="term-empty">${html}</div>`;
+        return;
+      }
+      let marker = terminal.querySelector(".term-transport-error");
+      if(!marker){
+        marker = document.createElement("div");
+        marker.className = "term-transport-error";
+        terminal.appendChild(marker);
+      }
+      marker.innerHTML = html;
+    }
+
+    function handleNodeSshWsEvent(msg){
+      const execId = String(msg?.exec_id || "").trim();
+      if(!execId || execId !== nodeSshLiveExecId) return;
+
+      const nodeKey = String(msg?.node_key || msg?.node_id || msg?.node_name || "").trim() || "node";
+      if(!nodeSshLiveNodes[nodeKey]){
+        nodeSshLiveNodes[nodeKey] = {
+          nodeKey,
+          nodeName: String(msg?.node_name || msg?.node_id || nodeKey),
+          lines: [],
+          done: false,
+          ok: false,
+          exitCode: null,
+          durationMs: 0,
+          error: ""
+        };
+      }
+
+      const node = nodeSshLiveNodes[nodeKey];
+      if(msg.type === "node_ssh_stream"){
+        const line = String(msg?.line || "");
+        node.lines.push(line);
+        if(node.lines.length > 500){
+          node.lines = node.lines.slice(node.lines.length - 500);
+        }
+      } else if(msg.type === "node_ssh_stream_done"){
+        node.done = true;
+        node.ok = !!msg?.ok;
+        node.exitCode = Number(msg?.exit_code);
+        node.durationMs = Number(msg?.duration_ms || 0);
+        node.error = String(msg?.error || "");
+      }
+      renderNodeSshLive();
+    }
+
+    function renderNodeSshOutput(payload){
+      const box = $("nodeSshOutput");
+      const summary = $("nodeSshSummary");
+      const singleHint = $("nodeSshSingleHint");
+      if(!box || !summary) return;
+      const results = Array.isArray(payload?.results) ? payload.results : [];
+      const unresolved = Array.isArray(payload?.unresolved) ? payload.unresolved : [];
+      const command = String(payload?.command || "").trim();
+      nodeSshLiveExecId = "";
+      nodeSshLiveHeader = "";
+      nodeSshLiveNodes = {};
+      nodeSshLastResults = results;
+
+      if(results.length === 0){
+        box.innerHTML = `<div class="term-empty">Нет результатов выполнения.</div>`;
+      } else {
+        const stamp = new Date().toLocaleTimeString("ru-RU", {hour12:false});
+        const items = results.map(r=>{
+          const ok = !!r.ok;
+          const code = Number(r.exit_code);
+          const ms = Number(r.duration_ms || 0);
+          const stdoutHtml = ansiToHtml(r.stdout || "");
+          const stderrHtml = ansiToHtml(r.stderr || "");
+          const errorText = normalizeSshError(r.error || "");
+          const errHtml = errorText ? `<div class="stderr">${esc(errorText).replace(/\n/g, "<br>")}</div>` : "";
+          const body = [stdoutHtml, stderrHtml ? `<div class="stderr">${stderrHtml}</div>` : "", errHtml].filter(Boolean).join("<br>");
+          return `<article class="term-block ${ok ? "ok" : "fail"}">
+            <div class="term-head">
+              <div class="term-title"><i class="nodeops-dot ${ok ? "on" : "off"}"></i><b>${esc(r.node_name || r.node_id || r.address || "node")}</b></div>
+              <div class="term-meta">exit ${Number.isFinite(code) ? code : "-"} • ${ms} ms</div>
+            </div>
+            <div class="term-box">${body || "<span class='muted'>пустой вывод</span>"}</div>
+          </article>`;
+        }).join("");
+        box.innerHTML = `<div class="term-terminal">
+          <div class="term-headline">
+            <span class="term-host">ffxban@panel</span>
+            <span class="term-time">${esc(stamp)}</span>
+          </div>
+          <div class="term-command"><span class="sym">$</span> ${esc(command || "command")}</div>
+          ${items}
+        </div>`;
+      }
+
+      const okCount = Number(payload?.success_count || 0);
+      const failCount = Number(payload?.failed_count || 0);
+      const unresCount = unresolved.length;
+      const unresolvedText = unresCount > 0
+        ? ` • неразрешено: ${unresolved.map(u=>String(u.ref || "?")).join(", ")}`
+        : "";
+      const line = `OK: ${okCount}, FAIL: ${failCount}, RESOLVED: ${results.length}${unresolvedText}`;
+      summary.textContent = line;
+      if(singleHint){
+        const rows = nodeSshRows();
+        const selected = nodeSshSelectedRows(rows);
+        if(selected.length <= 1){
+          singleHint.textContent = line;
+        }
+      }
+      renderNodeSshMode(nodeSshRows());
+    }
+
+    async function runNodeSshCommand(){
+      if(nodeSshRunning) return;
+      const cmd = String($("nodeSshCommand")?.value || "").trim();
+      if(!cmd){
+        showNotice("Введите команду", "err");
+        return;
+      }
+
+      const rows = nodeSshRows();
+      const selectedRows = nodeSshSelectedRows(rows);
+      const selected = selectedRows.map(r=>r.id || r.name || r.address);
+      if(selected.length < 2){
+        showNotice("Массовая команда доступна при выборе 2+ нод", "err");
+        renderNodeSshMode(rows);
+        return;
+      }
+
+      const runBtn = $("nodeSshRun");
+      const summary = $("nodeSshSummary");
+      nodeSshRunning = true;
+      renderNodeSshMode(rows);
+      if(runBtn){
+        runBtn.disabled = true;
+        runBtn.textContent = "Выполняется...";
+      }
+      if(summary){
+        summary.textContent = `Выполнение команды на ${selected.length} нод(ах)...`;
+      }
+
+      try{
+        const timeoutSeconds = Number($("nodeSshTimeout")?.value || 45);
+        const execId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `exec-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;
+        initNodeSshLive(execId, cmd);
+        const payload = await api("/api/nodes/ssh/exec", {
+          method: "POST",
+          body: JSON.stringify({
+            nodes: selected,
+            command: cmd,
+            timeout_seconds: timeoutSeconds,
+            exec_id: execId
+          })
+        });
+        renderNodeSshOutput(payload);
+        showNotice(`SSH: выполнено, OK ${payload.success_count||0}, FAIL ${payload.failed_count||0}`, Number(payload.failed_count||0) > 0 ? "err" : "ok");
+      }catch(e){
+        showNodeSshTransportError(e.message);
+        if(summary){
+          summary.textContent = `Ошибка SSH: ${e.message}`;
+        }
+        showNotice(`SSH ошибка: ${e.message}`, "err");
+      }finally{
+        nodeSshRunning = false;
+        if(runBtn){
+          runBtn.disabled = false;
+          runBtn.textContent = "Выполнить на выбранных";
+        }
+        renderNodeSshMode(nodeSshRows());
+      }
+    }
+
+    async function runNodeSshSingleCommand(){
+      if(nodeSshRunning) return;
+      const cmd = String($("nodeSshSingleCommand")?.value || "").trim();
+      if(!cmd){
+        showNotice("Введите команду для ноды", "err");
+        return;
+      }
+
+      const rows = nodeSshRows();
+      const active = nodeSshActiveRow(rows);
+      if(!active){
+        showNotice("Нажмите на ноду слева", "err");
+        return;
+      }
+
+      const ref = active.id || active.name || active.address;
+      const runBtn = $("nodeSshRunSingle");
+      const hint = $("nodeSshSingleHint");
+      nodeSshRunning = true;
+      renderNodeSshMode(rows);
+      if(runBtn){
+        runBtn.disabled = true;
+        runBtn.textContent = "Выполняется...";
+      }
+      if(hint){
+        hint.textContent = `Выполнение на ноде ${active.name}...`;
+      }
+
+      try{
+        const timeoutSeconds = Number($("nodeSshSingleTimeout")?.value || 45);
+        const execId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `exec-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;
+        initNodeSshLive(execId, cmd);
+        const payload = await api("/api/nodes/ssh/exec", {
+          method: "POST",
+          body: JSON.stringify({
+            nodes: [ref],
+            command: cmd,
+            timeout_seconds: timeoutSeconds,
+            exec_id: execId
+          })
+        });
+        renderNodeSshOutput(payload);
+        showNotice(`SSH: ${active.name}, OK ${payload.success_count||0}, FAIL ${payload.failed_count||0}`, Number(payload.failed_count||0) > 0 ? "err" : "ok");
+      }catch(e){
+        showNodeSshTransportError(e.message);
+        if(hint){
+          hint.textContent = `Ошибка SSH: ${e.message}`;
+        }
+        showNotice(`SSH ошибка: ${e.message}`, "err");
+      }finally{
+        nodeSshRunning = false;
+        if(runBtn){
+          runBtn.disabled = false;
+          runBtn.textContent = "Выполнить на ноде";
+        }
+        renderNodeSshMode(nodeSshRows());
+      }
+    }
+
+    function clearNodeSshOutput(){
+      nodeSshLastResults = [];
+      nodeSshLiveExecId = "";
+      nodeSshLiveHeader = "";
+      nodeSshLiveNodes = {};
+      const box = $("nodeSshOutput");
+      const summary = $("nodeSshSummary");
+      if(box){
+        box.innerHTML = `<div class="term-empty">Вывод очищен.</div>`;
+      }
+      if(summary){
+        summary.textContent = "Готово к выполнению.";
+      }
+      renderNodeSshMode(nodeSshRows());
+    }
+
+    // ── Node SSH credentials management ──────────────────────────────────────
+
+    async function loadNodeSSHCreds(){
+      try{
+        const data = await api("/api/nodes/ssh/creds");
+        nodeSshCreds = {};
+        (data?.items || []).forEach(it=>{
+          if(it.node_key){
+            nodeSshCreds[it.node_key] = {
+              user: it.user,
+              has_password: !!it.has_password,
+              has_private_key: !!it.has_private_key
+            };
+          }
+        });
+      }catch(_){}
+    }
+
+    function openNodeCredModal(nodeKey, nodeName){
+      if(!nodeKey) return;
+      credModalNodeKey = nodeKey;
+      const shell = $("credModalShell");
+      const titleEl = $("credModalTitle");
+      const subEl = $("credModalSub");
+      const userEl = $("credUser");
+      const pwEl = $("credPassword");
+      const keyEl = $("credPrivateKey");
+      const delBtn = $("credDeleteBtn");
+      if(!shell) return;
+
+      if(titleEl) titleEl.textContent = `SSH: ${nodeName || nodeKey}`;
+      if(subEl) subEl.textContent = `node_key: ${nodeKey}`;
+
+      const saved = nodeSshCreds[nodeKey];
+      if(userEl) userEl.value = saved?.user || "";
+      if(pwEl) pwEl.value = "";
+      if(pwEl) pwEl.placeholder = saved?.has_password ? "●●●●●● (оставьте пустым, чтобы не менять)" : "Пароль SSH";
+      if(keyEl) keyEl.value = "";
+      if(keyEl) keyEl.placeholder = saved?.has_private_key
+        ? "●●●●●● ключ уже сохранён (оставьте пустым, чтобы не менять)"
+        : "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----";
+      if(delBtn) delBtn.style.display = saved ? "" : "none";
+
+      shell.classList.add("active");
+      setTimeout(()=>{ if(userEl && !userEl.value) userEl.focus(); else if(pwEl) pwEl.focus(); }, 80);
+    }
+
+    function closeNodeCredModal(){
+      const shell = $("credModalShell");
+      if(shell) shell.classList.remove("active");
+      credModalNodeKey = "";
+    }
+
+    async function saveNodeCred(){
+      const key = credModalNodeKey;
+      if(!key) return;
+      const user = String($("credUser")?.value || "").trim();
+      const password = String($("credPassword")?.value || "");
+      const privateKey = String($("credPrivateKey")?.value || "").trim();
+      if(!user){ showNotice("Введите пользователя SSH", "err"); return; }
+      const saveBtn = $("credSaveBtn");
+      if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = "Сохранение..."; }
+      try{
+        await api("/api/nodes/ssh/creds", {
+          method:"POST",
+          body: JSON.stringify({node_key: key, user, password, private_key: privateKey})
+        });
+        await loadNodeSSHCreds();
+        showNotice(`Credentials для ${key} сохранены`, "ok");
+        closeNodeCredModal();
+        renderNodeSshNodes();
+      }catch(e){
+        showNotice(`Ошибка: ${e.message}`, "err");
+      }finally{
+        if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = "Сохранить"; }
+      }
+    }
+
+    async function deleteNodeCred(){
+      const key = credModalNodeKey;
+      if(!key) return;
+      if(!confirm(`Удалить SSH-учётные данные для ноды "${key}"?`)) return;
+      try{
+        await api("/api/nodes/ssh/creds", {
+          method:"DELETE",
+          body: JSON.stringify({node_key: key})
+        });
+        await loadNodeSSHCreds();
+        showNotice(`Credentials для ${key} удалены`, "ok");
+        closeNodeCredModal();
+        renderNodeSshNodes();
+      }catch(e){
+        showNotice(`Ошибка: ${e.message}`, "err");
+      }
+    }
+
+    async function runNodeSshOnAll(){
+      if(nodeSshRunning) return;
+      // Используем команду из textarea массового режима или одиночного
+      const cmd = String($("nodeSshCommand")?.value || $("nodeSshSingleCommand")?.value || "").trim();
+      if(!cmd){ showNotice("Введите команду", "err"); return; }
+      nodeSshSelect("all");
+      await new Promise(r=>setTimeout(r,0));
+      const rows = nodeSshRows();
+      const all = rows.filter(r=>r.selectable).map(r=>r.id||r.name||r.address);
+      if(all.length === 0){ showNotice("Нет доступных нод", "err"); return; }
+      const runBtn = $("nodeSshRunAll");
+      const summary = $("nodeSshSummary");
+      nodeSshRunning = true;
+      renderNodeSshMode(rows);
+      if(runBtn){ runBtn.disabled = true; runBtn.textContent = "⏳ Выполняется..."; }
+      if(summary){ summary.textContent = `Выполнение на всех ${all.length} нодах...`; }
+      try{
+        const timeoutSeconds = Number($("nodeSshTimeout")?.value || $("nodeSshSingleTimeout")?.value || 45);
+        const execId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `exec-${Date.now()}-${Math.random().toString(36).slice(2,10)}`;
+        initNodeSshLive(execId, cmd);
+        const payload = await api("/api/nodes/ssh/exec", {
+          method:"POST",
+          body: JSON.stringify({nodes: all, command: cmd, timeout_seconds: timeoutSeconds, exec_id: execId})
+        });
+        renderNodeSshOutput(payload);
+        showNotice(`ALL SSH: OK ${payload.success_count||0}, FAIL ${payload.failed_count||0}`,
+          Number(payload.failed_count||0) > 0 ? "err" : "ok");
+      }catch(e){
+        showNodeSshTransportError(e.message);
+        if(summary){ summary.textContent = `Ошибка: ${e.message}`; }
+        showNotice(`SSH ошибка: ${e.message}`, "err");
+      }finally{
+        nodeSshRunning = false;
+        if(runBtn){ runBtn.disabled = false; runBtn.textContent = "⚡ Все ноды"; }
+        renderNodeSshMode(nodeSshRows());
+      }
+    }
+
+    // ── SSH Interactive Terminal ──────────────────────────────────────────────
+
+    const sstSessions = {};   // sessionId → {id, nodeKey, nodeName, ws, term, fitAddon, paneEl, tabEl, status}
+    let sstIdCounter = 0;
+
+    function sstXterm(){
+      return window.Terminal;
+    }
+    function sstFitAddon(){
+      if(window.FitAddon) return window.FitAddon.FitAddon;
+      return null;
+    }
+
+    async function loadSstNodes(){
+      const sel = $("sstNodeSelect");
+      if(!sel) return;
+      try{
+        const data = await api("/api/nodes/ssh/terminal/nodes");
+        const nodes = Array.isArray(data?.nodes) ? data.nodes : [];
+        const prev = sel.value;
+        sel.innerHTML = `<option value="">— выберите ноду —</option>` +
+          nodes.sort((a,b)=>String(a.name||a.key).localeCompare(String(b.name||b.key),"ru")).map(n=>{
+            const label = esc(n.name || n.key);
+            const tag = n.has_creds ? "🔑" : (!n.has_addr ? " ⚠" : "");
+            return `<option value="${esc(n.key)}" ${!n.has_addr?"disabled":""}>${label}${tag}</option>`;
+          }).join("");
+        if(nodes.find(n=>n.key===prev)) sel.value = prev;
+      }catch(_){}
+    }
+
+    function openSstTerminal(nodeKey){
+      if(!nodeKey){ showNotice("Выберите ноду", "err"); return; }
+      const TermClass = sstXterm();
+      const FitClass  = sstFitAddon();
+      if(!TermClass){ showNotice("xterm.js не загружен", "err"); return; }
+
+      const id = `sst${++sstIdCounter}`;
+      const nodeName = (() => {
+        const opt = $("sstNodeSelect")?.querySelector(`option[value="${CSS.escape(nodeKey)}"]`);
+        return opt ? opt.textContent.replace(/[🔑⚠]/g,"").trim() : nodeKey;
+      })();
+
+      // Hide empty state
+      const emptyEl = $("sstEmptyState");
+      if(emptyEl) emptyEl.style.display = "none";
+
+      // Create pane
+      const paneEl = document.createElement("div");
+      paneEl.id = `pane-${id}`;
+      paneEl.className = "sshterm-pane";
+      $("sstPanel").appendChild(paneEl);
+
+      // Create xterm
+      const term = new TermClass({
+        cols: 220,
+        rows: 50,
+        theme: {
+          background:"#04080f", foreground:"#c8e0ff", cursor:"#4df5a3",
+          cursorAccent:"#04080f", black:"#000a1a", red:"#ff5477",
+          green:"#2fd683", yellow:"#fbbf24", blue:"#4f71ff",
+          magenta:"#b06dff", cyan:"#1ad5f0", white:"#dbe8ff",
+          brightBlack:"#1e3356", brightRed:"#ff7095", brightGreen:"#4df5a3",
+          brightYellow:"#fdd26a", brightBlue:"#7892ff", brightMagenta:"#c89dff",
+          brightCyan:"#56eaff", brightWhite:"#ffffff",
+          selectionBackground:"rgba(26,213,240,.25)"
+        },
+        fontFamily:'"Cascadia Code","Fira Code","JetBrains Mono",ui-monospace,Consolas,monospace',
+        fontSize:13, lineHeight:1.35, letterSpacing:0.3,
+        cursorBlink:true, cursorStyle:"block",
+        scrollback:5000, allowTransparency:true,
+        convertEol:false,
+      });
+
+      let fitAddon = null;
+      if(FitClass){
+        fitAddon = new FitClass();
+        term.loadAddon(fitAddon);
+      }
+      term.open(paneEl);
+      if(fitAddon){ try{ fitAddon.fit(); }catch(_){} }
+
+      // Tab
+      const tabEl = document.createElement("div");
+      tabEl.className = "sshterm-tab";
+      tabEl.id = `tab-${id}`;
+      tabEl.innerHTML = `<i class="sshterm-tab-dot connecting" id="tdot-${id}"></i><span class="sshterm-tab-name">${esc(nodeName)}</span><span class="sshterm-tab-close" data-id="${id}">✕</span>`;
+      tabEl.onclick = e => {
+        if(e.target.closest(".sshterm-tab-close")){
+          closeSstSession(id);
+        } else {
+          switchSstTab(id);
+        }
+      };
+      $("sstTabs").appendChild(tabEl);
+
+      // WebSocket
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const cols = term.cols || 220;
+      const rows = term.rows || 50;
+      const wsUrl = `${proto}//${location.host}/api/nodes/ssh/terminal?node_key=${encodeURIComponent(nodeKey)}&cols=${cols}&rows=${rows}`;
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = "arraybuffer";
+
+      const session = {id, nodeKey, nodeName, ws, term, fitAddon, paneEl, tabEl, status:"connecting"};
+      sstSessions[id] = session;
+
+      ws.onopen = () => {};
+      ws.onmessage = ev => {
+        if(ev.data instanceof ArrayBuffer){
+          term.write(new Uint8Array(ev.data));
+        } else {
+          try{
+            const ctrl = JSON.parse(ev.data);
+            if(ctrl.type === "connected"){
+              sstSetStatus(id, "conn");
+              if(fitAddon){ try{ fitAddon.fit(); }catch(_){} }
+              const sz = {cols: term.cols, rows: term.rows};
+              ws.send(JSON.stringify({type:"resize", cols:sz.cols, rows:sz.rows}));
+            } else if(ctrl.type === "error"){
+              sstSetStatus(id, "closed");
+              term.write(`\r\n\x1b[1;31m[Ошибка: ${ctrl.message}]\x1b[0m\r\n`);
+            } else if(ctrl.type === "closed"){
+              sstSetStatus(id, "closed");
+              term.write("\r\n\x1b[33m[Соединение закрыто]\x1b[0m\r\n");
+            }
+          }catch(_){}
+        }
+      };
+      ws.onerror = () => {
+        sstSetStatus(id, "closed");
+        term.write("\r\n\x1b[1;31m[WebSocket ошибка]\x1b[0m\r\n");
+      };
+      ws.onclose = () => {
+        sstSetStatus(id, "closed");
+      };
+
+      // Input: terminal → WS
+      term.onData(data => {
+        if(ws.readyState === WebSocket.OPEN){
+          const encoded = new TextEncoder().encode(data);
+          ws.send(encoded);
+        }
+      });
+
+      // Resize
+      term.onResize(({cols,rows}) => {
+        if(ws.readyState === WebSocket.OPEN){
+          ws.send(JSON.stringify({type:"resize", cols, rows}));
+        }
+      });
+
+      switchSstTab(id);
+      term.focus();
+    }
+
+    function sstSetStatus(id, status){
+      const session = sstSessions[id];
+      if(!session) return;
+      session.status = status;
+      const dot = document.getElementById(`tdot-${id}`);
+      if(dot){
+        dot.className = `sshterm-tab-dot ${status === "conn" ? "conn" : "closed"}`;
+      }
+      const st = $("sstStatus");
+      if(st) st.textContent = "";
+    }
+
+    function switchSstTab(id){
+      Object.values(sstSessions).forEach(s => {
+        s.paneEl.classList.remove("active");
+        s.tabEl.classList.remove("active");
+      });
+      const session = sstSessions[id];
+      if(!session) return;
+      session.paneEl.classList.add("active");
+      session.tabEl.classList.add("active");
+      // Fit after becoming visible
+      setTimeout(() => {
+        if(session.fitAddon){ try{ session.fitAddon.fit(); }catch(_){} }
+        session.term.focus();
+      }, 30);
+    }
+
+    function closeSstSession(id){
+      const session = sstSessions[id];
+      if(!session) return;
+      try{ session.ws.close(); }catch(_){}
+      try{ session.term.dispose(); }catch(_){}
+      session.paneEl.remove();
+      session.tabEl.remove();
+      delete sstSessions[id];
+
+      const remaining = Object.keys(sstSessions);
+      if(remaining.length > 0){
+        switchSstTab(remaining[remaining.length - 1]);
+      } else {
+        const emptyEl = $("sstEmptyState");
+        if(emptyEl) emptyEl.style.display = "";
+      }
+    }
+
+    function closeSstAll(){
+      Object.keys(sstSessions).forEach(id => closeSstSession(id));
+    }
+
+    function renderSshterm(){
+      loadSstNodes();
+      // Handle window resize for active terminal
+      const active = Object.values(sstSessions).find(s => s.paneEl.classList.contains("active"));
+      if(active?.fitAddon){ try{ active.fitAddon.fit(); }catch(_){} }
+    }
+
+    // Resize observer for the terminal panel
+    let sstResizeObs = null;
+    function initSstResizeObserver(){
+      const panel = $("sstPanel");
+      if(!panel || sstResizeObs) return;
+      if(window.ResizeObserver){
+        sstResizeObs = new ResizeObserver(() => {
+          const active = Object.values(sstSessions).find(s => s.paneEl.classList.contains("active"));
+          if(active?.fitAddon){ try{ active.fitAddon.fit(); }catch(_){} }
+        });
+        sstResizeObs.observe(panel);
+      }
+    }
+
+    function trafficStatusBadge(row){
+      const st = String(row?.status || "").toLowerCase();
+      if(st === "disabled" || st === "expired") return semanticBadge("offline", "off");
+      if(row?.online || st === "online") return semanticBadge("online", "online");
+      if(st === "active") return semanticBadge("warn", "active");
+      if(st === "offline") return semanticBadge("offline", "offline");
+      return semanticBadge("warn", st || "-");
+    }
+
+    function trafficRows(){
+      return Array.isArray(trafficData?.rows) ? trafficData.rows : [];
+    }
+
+    function syncTrafficFilters(rows){
+      const setFrom = (arr, fallback) => {
+        if(Array.isArray(arr) && arr.length) return [...new Set(arr.map(v=>String(v||"").trim()).filter(Boolean))];
+        return [...new Set((fallback||[]).map(v=>String(v||"").trim()).filter(Boolean))];
+      };
+      const tariffs = setFrom(trafficData?.filters?.tariffs, rows.map(r=>r.tariff));
+      const nodes = setFrom(trafficData?.filters?.nodes, rows.map(r=>r.last_node_display || r.last_node));
+      const statuses = setFrom(trafficData?.filters?.statuses, rows.map(r=>r.status));
+
+      const fill = (id, title, values) => {
+        const sel = $(id);
+        if(!sel) return;
+        const prev = sel.value || "all";
+        sel.innerHTML = `<option value="all">${title}</option>` + values.sort((a,b)=>a.localeCompare(b,"ru")).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+        sel.value = values.includes(prev) ? prev : "all";
+      };
+      fill("fTrafficTariff", "Тариф: все", tariffs);
+      fill("fTrafficNode", "Ноды: все", nodes);
+      fill("fTrafficStatus", "Статус: все", statuses);
+    }
+
+    function filteredTrafficRows(){
+      const rows = trafficRows();
+      const q = String($("qTraffic")?.value || "").trim().toLowerCase();
+      const tariff = String($("fTrafficTariff")?.value || "all");
+      const node = String($("fTrafficNode")?.value || "all");
+      const status = String($("fTrafficStatus")?.value || "all");
+
+      return rows.filter(r=>{
+        const rowTariff = String(r.tariff || "").trim();
+        const rowNode = String(r.last_node_display || r.last_node || "").trim();
+        const rowStatus = String(r.status || "").trim();
+        if(tariff !== "all" && rowTariff !== tariff) return false;
+        if(node !== "all" && rowNode !== node) return false;
+        if(status !== "all" && rowStatus !== status) return false;
+        if(!q) return true;
+        const hay = [
+          String(r.user_identifier || ""),
+          String(r.username || ""),
+          String(r.email || ""),
+          rowTariff,
+          rowNode,
+          rowStatus
+        ].join(" ").toLowerCase();
+        return hay.includes(q);
+      });
+    }
+
+    function setTrafficPeriod(period){
+      const next = String(period || "").trim();
+      if(!next || next === trafficPeriod) return;
+      trafficPeriod = next;
+      document.querySelectorAll("#trafficPeriodGroup .seg-btn").forEach(btn=>{
+        btn.classList.toggle("active", btn.dataset.period === trafficPeriod);
+      });
+      load(false);
+    }
+
+    function renderTraffic(){
+      const rows = trafficRows();
+      syncTrafficFilters(rows);
+
+      document.querySelectorAll("#trafficPeriodGroup .seg-btn").forEach(btn=>{
+        btn.classList.toggle("active", btn.dataset.period === trafficPeriod);
+      });
+
+      const summary = trafficData?.summary || {};
+      $("kTrafficUsers").textContent = Number(summary.total_users || rows.length || 0);
+      $("kTrafficOnline").textContent = Number(summary.online_users || 0);
+      $("kTrafficUsed").textContent = fmtBytes(Number(summary.total_used_bytes || 0));
+      $("kTrafficLimit").textContent = fmtBytes(Number(summary.total_limit_bytes || 0));
+
+      const meta = trafficData?.meta || {};
+      const metaParts = [];
+      if(meta.period_supported === false) metaParts.push("История по периодам пока недоступна: показан суммарный трафик.");
+      if(meta.per_node_breakdown_supported === false) metaParts.push("Разбивка трафика по нодам для пользователя пока недоступна.");
+      if(meta.generated_at) metaParts.push(`Обновлено: ${t(meta.generated_at)}`);
+      $("trafficMetaHint").textContent = metaParts.join(" ");
+
+      const filtered = filteredTrafficRows();
+      $("tbTraffic").innerHTML = filtered.map(r=>{
+        const usedGB = (Number(r.used_traffic_bytes || 0) / (1024**3));
+        const lifeGB = (Number(r.lifetime_used_traffic_bytes || 0) / (1024**3));
+        const limitGB = (Number(r.traffic_limit_bytes || 0) / (1024**3));
+        const coverage = Number(r.used_percent || 0);
+        const coverageBadge = Number(r.traffic_limit_bytes || 0) > 0
+          ? `<span class="badge ${coverage >= 100 ? "b-red" : (coverage >= 80 ? "b-amber" : "b-green")}">${coverage.toFixed(1)}%</span>`
+          : '<span class="badge">без лимита</span>';
+        const node = resolveNodeLabel(r.last_node_display, r.last_node);
+        const user = renderUserCell(r.user_identifier, r.username || r.email || "");
+        return `<tr>
+          <td>${user}</td>
+          <td>${esc(r.tariff || r.tag || "-")}</td>
+          <td>${r.device_limit>0?`<span class="badge b-blue">${r.device_limit}</span>`:"-"}</td>
+          <td>${r.connected_ips>0?`<span class="badge b-green">${r.connected_ips}</span>`:`<span class="badge">${Number(r.connected_ips||0)}</span>`}</td>
+          <td>${usedGB.toFixed(2)}</td>
+          <td>${lifeGB.toFixed(2)}</td>
+          <td>${limitGB > 0 ? limitGB.toFixed(2) : "-"}</td>
+          <td>${coverageBadge}</td>
+          <td>${t(r.first_connected_at || r.online_at)}</td>
+          <td>${t(r.expire_at)}</td>
+          <td>${esc(node)}</td>
+          <td>${trafficStatusBadge(r)}</td>
+        </tr>`;
+      }).join("") || emptyRow(12, "◌", "Нет данных по трафику", "Данные появятся после первого обращения к API трафика");
+      bindUserOpenLinks($("tbTraffic"));
     }
 
     function renderViolators(v){
@@ -1079,7 +2980,7 @@
           <td>${when ? t(when) : "-"}</td>
         </tr>`;
       }).join("")
-        || `<tr><td colspan="7" class="muted" style="padding:14px">Нарушителей нет</td></tr>`;
+        || emptyRow(7, "✓", "Нарушителей нет", "Все пользователи в пределах лимитов");
       bindUserOpenLinks($("tbViolators"));
       $("tbViolators").querySelectorAll(".viol-cb").forEach(cb=>{
         cb.onchange = () => {
@@ -1118,7 +3019,7 @@
             <td>${t(b.banlist_since || b.violator_since)}</td>
             <td>${Number.isFinite(Number(b.duration_seconds)) ? `${b.duration_seconds} сек` : "-"}</td>
           </tr>`;
-        }).join("") || `<tr><td colspan="7" class="muted">Пусто</td></tr>`;
+        }).join("") || emptyRow(7, "🔒", "Бан-лист пуст", "Пользователей в бан-листе нет");
         bindUserOpenLinks($("tbBan"));
         $("tbBan").querySelectorAll(".ban-cb").forEach(cb=>{
           cb.onchange = () => {
@@ -1144,7 +3045,7 @@
           <td>${t(b.set_at)}</td>
           <td>${b.seconds_left>0 ? `${b.seconds_left} сек` : (b.duration || "-")}</td>
         </tr>`;
-      }).join("") || `<tr><td colspan="7" class="muted">Пусто</td></tr>`;
+      }).join("") || emptyRow(7, "🔒", "Бан-лист пуст", "Активных блокировок нет");
       bindUserOpenLinks($("tbBan"));
       $("tbBan").querySelectorAll(".ban-cb").forEach(cb=>{
         cb.onchange = () => {
@@ -1169,6 +3070,35 @@
       }
     }
 
+    function updateUsersBulkBar(){
+      const bar = $("usersBulkBar");
+      const cnt = $("usersBulkCount");
+      if(!bar || !cnt) return;
+      if(usersSel.size > 0){
+        bar.classList.add("show");
+        cnt.textContent = `${usersSel.size} выбрано`;
+      } else {
+        bar.classList.remove("show");
+      }
+    }
+
+    async function bulkBlockUsers(ids){
+      if(!ids || ids.size === 0) return;
+      const arr = [...ids];
+      const duration = $("usersBulkDuration")?.value || "1h";
+      const reason = await askReason(`Заблокировать ${arr.length} пользователей`, `Длительность: ${duration}. Причина (опционально):`);
+      if(reason === null) return;
+      let ok = 0, fail = 0;
+      for(const id of arr){
+        try{
+          await api("/api/actions/block",{method:"POST",body:JSON.stringify({user_identifier:id,duration,reason:reason||"bulk_block"})});
+          ok++;
+        }catch{ fail++; }
+      }
+      showNotice(`Заблокировано: ${ok}${fail>0?`, ошибок: ${fail}`:""}`, fail>0?"err":"ok");
+      await load(true);
+    }
+
     function getBanCount(userId) {
       const u = (users||[]).find(u => String(u.user_identifier||"") === String(userId||""));
       const bc = Number(u?.sharing?.ban_count);
@@ -1191,21 +3121,21 @@
           <td>${esc(b.duration||"-")}</td>
           <td><span class="countdown${expired?' expired':''}">${left}</span></td>
         </tr>`;
-      }).join("") || `<tr><td colspan="6" class="muted" style="padding:14px">Активных банов нет</td></tr>`;
+      }).join("") || emptyRow(6, "🔓", "Активных IP-банов нет", "Новые баны появятся здесь автоматически");
       bindUserOpenLinks($("tbActiveBans"));
     }
 
-    function renderPidarasy(){
+    function renderPermBan(){
       const rows = Array.isArray(permanentSharers) ? permanentSharers : [];
-      $("tbPidarasy").innerHTML = rows.map(b=>`<tr>
+      $("tbPermBan").innerHTML = rows.map(b=>`<tr>
         <td>${renderUserCell(b.user_identifier, b.username)}</td>
         <td>${esc((b.violation_ips||[]).slice(0,3).join(", ") || "-")}</td>
         <td>${Number.isFinite(Number(b.limit)) ? b.limit : "-"}</td>
         <td>${Number.isFinite(Number(b.trigger_hits)) && Number.isFinite(Number(b.trigger_required)) ? `${b.trigger_hits}/${b.trigger_required}` : "-"}</td>
         <td>${esc((b.violation_nodes||[]).slice(0,3).map(displayNodeName).join(", ") || resolveNodeLabel(b.last_node_display, b.last_node) || "-")}</td>
         <td>${t(b.permanent_ban_since || b.banlist_since || b.violator_since)}</td>
-      </tr>`).join("") || `<tr><td colspan="6" class="muted">Пусто</td></tr>`;
-      bindUserOpenLinks($("tbPidarasy"));
+      </tr>`).join("") || emptyRow(6, "☠", "Перманентных банов нет", "Пользователи с подтверждённым шарингом появятся здесь");
+      bindUserOpenLinks($("tbPermBan"));
     }
 
     function renderNet(){
@@ -1223,7 +3153,7 @@
         <td>${r.ips_count||0}</td>
         <td>${(r.providers||[]).slice(0,3).map(esc).join(", ") || "-"}</td>
         <td>${(r.examples||[]).slice(0,6).map(esc).join(", ") || "-"}</td>
-      </tr>`).join("") || `<tr><td colspan="5" class="muted">Нет данных</td></tr>`;
+      </tr>`).join("") || emptyRow(5, "◌", "Нет данных по типам сетей", "Статистика появится после обработки логов");
     }
 
     function renderShared(){
@@ -1236,7 +3166,7 @@
       }
       const rows=[...m.entries()].filter(([,arr])=>arr.length>1).sort((a,b)=>b[1].length-a[1].length);
       $("tbShared").innerHTML=rows.map(([ip,arr])=>`<tr><td>${ip}</td><td><span class="badge b-red">${arr.length}</span></td><td>${arr.map(esc).join(", ")}</td></tr>`).join("")
-        || `<tr><td colspan="3" class="muted">Общих IP нет</td></tr>`;
+        || emptyRow(3, "◉", "Общих IP нет", "Каждый IP используется только одним пользователем");
     }
 
     function logCategory(tp){
@@ -1286,12 +3216,96 @@
         <td>${esc(r.source_ip || "-")}</td>
         <td>${esc(displayNodeName(r.node_name || "-"))}</td>
         <td>${esc(r.message || "-")}</td>
-      </tr>`).join("") || `<tr><td colspan="6" class="muted">Нет данных</td></tr>`;
+      </tr>`).join("") || emptyRow(6, "▪", "Нет событий", "Журнал пуст для выбранного фильтра");
     }
 
     function renderHwid(){
-      $("tbHwid").innerHTML=users.map(u=>`<tr><td>${esc(u.user_identifier)}</td><td><span class="badge ${u.exceeds?'b-red':'b-blue'}">${u.ip_count}</span></td><td>${u.limit}</td><td>${u.exceeds?'<span class="badge b-red">Превышен</span>':'<span class="badge b-green">Норма</span>'}</td></tr>`).join("")
-        || `<tr><td colspan="4" class="muted">Нет данных</td></tr>`;
+      $("tbHwid").innerHTML=users.map(u=>`<tr><td>${esc(u.user_identifier)}</td><td><span class="badge ${u.exceeds?'st-offline':'b-blue'}">${u.ip_count}</span></td><td>${u.limit}</td><td>${u.exceeds?semanticBadge("warn","Превышен"):semanticBadge("online","Норма")}</td></tr>`).join("")
+        || emptyRow(4, "◉", "Нет данных по HWID", "Устройства появятся здесь после обработки событий");
+    }
+
+    function cfgFormatValue(type, value){
+      if(type === "bool") return value ? "✓" : "✗";
+      if(type === "list") return Array.isArray(value) ? value.join(", ") : (value || "-");
+      return value !== undefined && value !== null ? String(value) : "-";
+    }
+
+    function renderConfigEditor(d){
+      const el = $("cfgEditor");
+      if(!el) return;
+      const overrides = d.runtime_overrides || {};
+      const hasOverride = (key)=>Object.prototype.hasOwnProperty.call(overrides, key);
+
+      const rows = CONFIG_EDIT_SCHEMA.map(row=>{
+        const key = row.key;
+        const value = d[key];
+        const hint = hasOverride(key) ? `<span class="badge b-amber">override</span>` : `<span class="badge">base</span>`;
+        if(row.type === "bool"){
+          const selected = !!value;
+          return `<tr>
+            <td>${esc(row.label)} ${hint}</td>
+            <td>
+              <select id="cfgEdit_${esc(key)}" class="select" style="min-width:140px">
+                <option value="true" ${selected ? "selected" : ""}>Включено</option>
+                <option value="false" ${!selected ? "selected" : ""}>Выключено</option>
+              </select>
+            </td>
+          </tr>`;
+        }
+        const inputType = row.type === "int" ? "number" : "text";
+        const attrs = [];
+        if(row.type === "int"){
+          if(Number.isFinite(row.min)) attrs.push(`min="${row.min}"`);
+          if(Number.isFinite(row.max)) attrs.push(`max="${row.max}"`);
+          attrs.push(`step="1"`);
+        }
+        const textValue = row.type === "list"
+          ? (Array.isArray(value) ? value.join(", ") : String(value || ""))
+          : String(value ?? "");
+        return `<tr>
+          <td>${esc(row.label)} ${hint}</td>
+          <td><input id="cfgEdit_${esc(key)}" type="${inputType}" class="input" style="width:100%;min-width:220px" value="${esc(textValue)}" ${attrs.join(" ")}></td>
+        </tr>`;
+      });
+
+      el.innerHTML = `<div class="table-wrap"><table class="cfg-table"><tbody>${rows.join("")}</tbody></table></div>
+      <p class="muted" style="margin-top:8px">Формат длительности: <code>30s</code>, <code>5m</code>, <code>2h</code>, <code>1d</code>, <code>permanent</code>. Список ступеней: через запятую.</p>`;
+    }
+
+    function collectConfigEditorPayload(){
+      const payload = {};
+      for(const row of CONFIG_EDIT_SCHEMA){
+        const el = $(`cfgEdit_${row.key}`);
+        if(!el) continue;
+        const raw = String(el.value ?? "").trim();
+        if(row.type === "bool"){
+          payload[row.key] = raw === "true";
+          continue;
+        }
+        if(row.type === "int"){
+          const n = Number(raw);
+          if(!Number.isInteger(n)) throw new Error(`${row.label}: требуется целое число`);
+          if(Number.isFinite(row.min) && n < row.min) throw new Error(`${row.label}: минимум ${row.min}`);
+          if(Number.isFinite(row.max) && n > row.max) throw new Error(`${row.label}: максимум ${row.max}`);
+          payload[row.key] = n;
+          continue;
+        }
+        if(row.type === "duration"){
+          if(!/^(\d+[smhd]|permanent)$/i.test(raw)) throw new Error(`${row.label}: неверный формат длительности`);
+          payload[row.key] = raw;
+          continue;
+        }
+        if(row.type === "list"){
+          const arr = raw.split(",").map(s=>s.trim()).filter(Boolean);
+          if(arr.some(x=>!/^(\d+[smhd]|permanent)$/i.test(x))){
+            throw new Error(`${row.label}: список должен содержать только длительности`);
+          }
+          payload[row.key] = arr;
+          continue;
+        }
+        payload[row.key] = raw;
+      }
+      return payload;
     }
 
     function renderConfig(){
@@ -1300,40 +3314,20 @@
       const d = cfgData;
       if(!d || Object.keys(d).length === 0){
         el.innerHTML = '<p class="muted">Нет данных конфигурации</p>';
+        const editor = $("cfgEditor");
+        if(editor) editor.innerHTML = '<p class="muted">Нет данных</p>';
         return;
       }
-      const rows = [
-        ["Макс. IP на пользователя", d.max_ips_per_user],
-        ["Длительность блокировки", d.block_duration],
-        ["TTL IP пользователя (сек)", d.user_ip_ttl_seconds],
-        ["Задержка очистки IP (сек)", d.clear_ips_delay_seconds],
-        ["Обнаружение шаринга", d.sharing_detection_enabled ? "✓ включено" : "✗ выключено"],
-        ["Порог триггеров", d.trigger_count],
-        ["Период триггеров (сек)", d.trigger_period_seconds],
-        ["Мин. интервал триггеров (сек)", d.trigger_min_interval_seconds],
-        ["Sustain шаринга (сек)", d.sharing_sustain_seconds],
-        ["Порог для бан-листа (сек)", d.banlist_threshold_seconds],
-        ["Окно источников шаринга (сек)", d.sharing_source_window_seconds],
-        ["Группировка по /24", d.subnet_grouping ? "✓" : "✗"],
-        ["Блок только по бан-листу", d.sharing_block_on_banlist_only ? "✓" : "✗"],
-        ["Блок только нарушителей", d.sharing_block_on_violator_only ? "✓" : "✗"],
-        ["Hardware Guard", d.sharing_hardware_guard ? "✓" : "✗"],
-        ["Перманентный бан (шаринг)", d.sharing_permanent_ban_enabled ? "✓" : "✗"],
-        ["Длительность перм. бана", d.sharing_permanent_ban_duration || "-"],
-        ["Эскалация банов", d.ban_escalation_enabled ? "✓" : "✗"],
-        ["Ступени эскалации", Array.isArray(d.ban_escalation_durations) ? d.ban_escalation_durations.join(", ") : (d.ban_escalation_durations || "-")],
-        ["Гео-шаринг", d.geo_sharing_enabled ? "✓" : "✗"],
-        ["Мин. стран для гео-бана", d.geo_sharing_min_countries],
-        ["Политика сети", d.network_policy_enabled ? "✓" : "✗"],
-        ["Grace IP для mobile", d.network_mobile_grace_ips],
-        ["Принудительный блок при превышении", d.network_force_block_excess_ips ? "✓" : "✗"],
-        ["Heuristics", d.heuristics_enabled ? "✓" : "✗"],
-        ["Окно heuristics (сек)", d.heuristics_window_seconds],
-        ["Таймаут heartbeat ноды (сек)", d.node_heartbeat_timeout_seconds],
-        ["Prometheus метрики", d.prometheus_enabled ? "✓" : "✗"],
-      ];
+
+      renderConfigEditor(d);
+      const ov = d.runtime_overrides || {};
+      const hasOv = key => Object.prototype.hasOwnProperty.call(ov, key);
+      const rows = CONFIG_EDIT_SCHEMA.map(row=>[
+        hasOv(row.key) ? `${row.label} (override)` : row.label,
+        cfgFormatValue(row.type, d[row.key])
+      ]);
       el.innerHTML = `<div class="table-wrap"><table class="cfg-table"><tbody>${
-        rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v !== undefined && v !== null ? esc(String(v)) : "-"}</td></tr>`).join("")
+        rows.map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")
       }</tbody></table></div>`;
     }
 
@@ -1400,6 +3394,30 @@
           options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{labels:CHART_LEGEND,position:'bottom'}}}
         });
       }
+
+      const ctx4 = document.getElementById('chartTrend');
+      if(ctx4 && trendHistory.timestamps.length > 0){
+        if(chartTrend) chartTrend.destroy();
+        chartTrend = new Chart(ctx4, {
+          type:'line',
+          data:{
+            labels: trendHistory.timestamps,
+            datasets:[
+              {label:'Онлайн',data:[...trendHistory.activeUsers],borderColor:'rgba(36,196,122,.9)',backgroundColor:'rgba(36,196,122,.08)',tension:.35,pointRadius:0,borderWidth:2,fill:true},
+              {label:'Нарушители',data:[...trendHistory.violators],borderColor:'rgba(255,190,59,.9)',backgroundColor:'rgba(255,190,59,.07)',tension:.35,pointRadius:0,borderWidth:2,fill:true},
+              {label:'Баны',data:[...trendHistory.bans],borderColor:'rgba(255,84,119,.9)',backgroundColor:'rgba(255,84,119,.07)',tension:.35,pointRadius:0,borderWidth:2,fill:true}
+            ]
+          },
+          options:{
+            responsive:true,maintainAspectRatio:false,animation:false,
+            plugins:{legend:{labels:CHART_LEGEND,position:'bottom'}},
+            scales:{
+              x:{ticks:{color:CHART_TICK,maxTicksLimit:8,maxRotation:0},grid:{color:CHART_GRID}},
+              y:{ticks:{color:CHART_TICK,precision:0},grid:{color:CHART_GRID},beginAtZero:true}
+            }
+          }
+        });
+      }
     }
 
     function tlTypeLabel(type){
@@ -1452,28 +3470,7 @@
     async function openUser(id, silent=false){
       openCardId = id;
       try{
-        let d;
-        if (appMode === '3xui') {
-            const cached = users.find(u => u.user_identifier === id);
-            if (!cached) throw new Error("Пользователь не найден в кэше");
-            // Fetch runtime data: active IPs, sharing status, history, limits
-            let rt = {};
-            try { rt = await api(`/api/users/${encodeURIComponent(id)}`); } catch(_){}
-            d = {
-                ...cached,
-                limit:           (cached.limit > 0 ? cached.limit : rt.limit) || 0,
-                history:         rt.history        || logs.filter(l => l.user_identifier === id),
-                hwid_devices:    rt.hwid_devices   || [],
-                active_ips:      rt.active_ips     || [],
-                sharing:         rt.sharing        || null,
-                total_events:    rt.total_events   ?? 0,
-                blocked_events:  rt.blocked_events ?? 0,
-                last_seen_at:    rt.last_seen_at   || cached.last_seen_at,
-                first_activity_at: rt.first_activity_at,
-            };
-        } else {
-            d = await api(`/api/users/${encodeURIComponent(id)}`);
-        }
+        const d = await api(`/api/users/${encodeURIComponent(id)}`);
         
         const name = (d.username && String(d.username).trim()) ? d.username : d.user_identifier;
         const history = (d.history || []).slice(0, 10);
@@ -1517,11 +3514,11 @@
         const parallelLive = activeNodeList.length >= 2;
         const lastParallelEvent = history.find(h => String(h.type || "").toLowerCase() === "node_parallel");
         const parallelSince = lastParallelEvent?.timestamp || "";
-        const connectionBadge = d.online ? '<span class="badge b-green">Онлайн</span>' : '<span class="badge">Оффлайн</span>';
+        const connectionBadge = d.online ? semanticBadge("online", "Онлайн") : semanticBadge("offline", "Оффлайн");
         const blockedNow = !!d.blocked_now;
         const statusBadge = blockedNow
-          ? '<span class="badge b-red">Заблокирован</span>'
-          : (d.exceeds ? '<span class="badge b-red">Нарушитель</span>' : '<span class="badge b-green">Норма</span>');
+          ? semanticBadge("offline", "Заблокирован")
+          : (d.exceeds ? semanticBadge("warn", "Нарушитель") : semanticBadge("online", "Норма"));
         const warning = blockedNow
           ? `<div class="warn-box"><b>Блокировка активна:</b> пользователь находится в активном бане.</div>`
           : (d.exceeds
@@ -1550,7 +3547,7 @@
         }).join("")}</div>` : `<p class="muted">История пуста</p>`;
 
         const geoSection = geoCountries.length > 0 || geoMismatch
-          ? `<div class="facts-row"><span>Гео-мисматч</span><b>${geoMismatch ? '<span class="badge b-red">Да</span>' : '<span class="badge b-green">Нет</span>'}</b></div>
+          ? `<div class="facts-row"><span>Гео-мисматч</span><b>${geoMismatch ? semanticBadge("warn", "Да") : semanticBadge("online", "Нет")}</b></div>
              <div class="facts-row"><span>Страны подключения</span><b>${geoCountries.length ? geoCountries.map(esc).join(", ") : "-"}</b></div>`
           : "";
 
@@ -1565,8 +3562,8 @@
                   <span class="meta-chip"><span class="k">Активность</span>${connectionBadge}</span>
                   <span class="meta-chip"><span class="k">Статус</span>${statusBadge}</span>
                   <span class="meta-chip multi"><span class="k">Ноды</span>${nodeBadges}</span>
-                  <span class="meta-chip"><span class="k">Ban-list</span>${sharing?.in_banlist ? '<span class="badge b-red">Да</span>' : '<span class="badge">Нет</span>'}</span>
-                  <span class="meta-chip"><span class="k">Перманент</span>${sharing?.permanent_ban ? '<span class="badge b-red">Да</span>' : '<span class="badge">Нет</span>'}</span>
+                  <span class="meta-chip"><span class="k">Ban-list</span>${sharing?.in_banlist ? semanticBadge("warn", "Да") : semanticBadge("online", "Нет")}</span>
+                  <span class="meta-chip"><span class="k">Перманент</span>${sharing?.permanent_ban ? semanticBadge("offline", "Да") : semanticBadge("online", "Нет")}</span>
                 </div>
               </div>
               <div class="user-actions">
@@ -1619,7 +3616,7 @@
                 <div class="facts-row"><span>Заблокировано раз</span><b style="color:${blockedEvents>0?'#ff9fb4':'inherit'}">${blockedEvents}</b></div>
                 <div class="facts-row"><span>Превышение сейчас</span><b>${esc(concurrentState)}</b></div>
                 <div class="facts-row"><span>Период триггера</span><b>${windowSeconds} сек</b></div>
-                <div class="facts-row"><span>Параллельно сейчас</span><b>${parallelLive ? '<span class="badge b-cyan">Да</span>' : '<span class="badge">Нет</span>'}</b></div>
+                <div class="facts-row"><span>Параллельно сейчас</span><b>${parallelLive ? semanticBadge("warn", "Да") : semanticBadge("online", "Нет")}</b></div>
                 <div class="facts-row"><span>Нод одновременно</span><b>${activeNodeList.length}</b></div>
                 <div class="facts-row"><span>Последний parallel</span><b>${parallelSince ? rel(parallelSince) : "-"}</b></div>
                 ${geoSection}
@@ -1630,10 +3627,10 @@
               <div class="facts-row"><span>Сводка по сетям</span><b>${esc(networkSummary)}</b></div>
               <div class="table-wrap"><table><thead><tr><th>IP</th><th>Нода</th><th>TTL</th><th>Подсеть</th><th>Сеть</th><th>Провайдер</th><th>Страна</th><th>Организация</th></tr></thead><tbody>${ipRows.map(ip=>`<tr><td>${esc(ip.ip)}</td><td>${esc(resolveNodeLabel(ip.node_display, ip.node_name))}</td><td>${ip.ttl_seconds}s</td><td>${esc(ip.subnet24)}</td><td>${esc(netTypeName(ip.network_type))}</td><td>${esc(ip.network_provider||"-")}</td><td>${esc(ip.network_country||"-")}</td><td>${esc(ip.network_org||"-")}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Нет активных IP</td></tr>`}</tbody></table></div>
             </section>
-            ${appMode === '3xui' ? '' : `<section class="user-card">
+            <section class="user-card">
               <h3>HWID устройства (${hwidCount})</h3>
               <div class="table-wrap"><table><thead><tr><th>HWID</th><th>Платформа</th><th>Модель</th><th>OS</th><th>User-Agent</th><th>Создано</th><th>Обновлено</th></tr></thead><tbody>${hwidDevices.map(dev=>`<tr><td>${esc(dev.hwid||"-")}</td><td>${esc(dev.platform||"-")}</td><td>${esc(dev.model||"-")}</td><td>${esc(dev.os||"-")}</td><td title="${esc(dev.user_agent||"")}">${esc(clipUa(dev.user_agent))}</td><td>${t(dev.created_at)}</td><td>${t(dev.updated_at)}</td></tr>`).join("") || `<tr><td colspan="7" class="muted">Нет данных по HWID</td></tr>`}</tbody></table></div>
-            </section>`}
+            </section>
             <section class="user-card">
               <h3>История событий (последние 10)</h3>
               ${timelineHtml}
@@ -1783,6 +3780,39 @@
       }), ["ID", "Имя", "IP", "Лимит", "Банов", "Добавлен", "Длительность"]);
     }
 
+    function exportTrafficCSV(){
+      const rows = filteredTrafficRows();
+      exportCSV("traffic_usage.csv", rows.map(r=>[
+        r.user_identifier || "",
+        r.username || r.email || "",
+        r.tariff || r.tag || "",
+        r.device_limit || "",
+        r.connected_ips || 0,
+        r.used_traffic_bytes || 0,
+        r.lifetime_used_traffic_bytes || 0,
+        r.traffic_limit_bytes || 0,
+        Number(r.used_percent || 0).toFixed(2),
+        r.first_connected_at || "",
+        r.expire_at || "",
+        r.last_node_display || r.last_node || "",
+        r.status || ""
+      ]), [
+        "ID",
+        "Имя",
+        "Тариф",
+        "Лимит устройств",
+        "Подключений",
+        "Used bytes",
+        "Lifetime used bytes",
+        "Limit bytes",
+        "Used %",
+        "First connected",
+        "Expire at",
+        "Last node",
+        "Status"
+      ]);
+    }
+
     async function changePassword(){
       const cur=$("curPass").value;
       const n1=$("newPass").value;
@@ -1798,6 +3828,68 @@
       }
     }
 
+    async function saveRuntimeOverrides(){
+      const msg = $("runtimeCfgMsg");
+      if(msg) msg.textContent = "";
+      try{
+        const payload = collectConfigEditorPayload();
+        const data = await api("/api/config/overrides", {method:"POST", body: JSON.stringify(payload)});
+        cfgData = data?.config || cfgData;
+        renderConfig();
+        if(msg) msg.textContent = "Конфигурация сохранена";
+        showNotice("Конфигурация сохранена", "ok");
+      }catch(e){
+        if(msg) msg.textContent = `Ошибка: ${e.message}`;
+        showNotice(`Ошибка сохранения: ${e.message}`, "err");
+      }
+    }
+
+    async function resetRuntimeOverrides(){
+      const msg = $("runtimeCfgMsg");
+      if(msg) msg.textContent = "";
+      try{
+        const data = await api("/api/config/overrides", {method:"DELETE"});
+        cfgData = data?.config || cfgData;
+        renderConfig();
+        if(msg) msg.textContent = "Runtime overrides сброшены";
+        showNotice("Runtime overrides сброшены", "ok");
+      }catch(e){
+        if(msg) msg.textContent = `Ошибка: ${e.message}`;
+        showNotice(`Ошибка сброса overrides: ${e.message}`, "err");
+      }
+    }
+
+    function renderPageContents(pageId){
+      const meta = collectDashboardMeta();
+      if(pageId === "dashboard"){
+        applyDashboardMeta(meta);
+        renderAlertsCenter(meta);
+        renderNodeFilters();
+        renderTopNodes();
+        renderHotUsers();
+        renderCharts();
+        renderSysinfo();
+        return;
+      }
+      if(pageId === "users"){
+        renderNodeFilters();
+        renderUsers();
+        return;
+      }
+      if(pageId === "traffic"){ renderTraffic(); return; }
+      if(pageId === "violators"){ renderViolators(meta.viol); return; }
+      if(pageId === "ban"){ renderBan(); return; }
+      if(pageId === "activebans"){ renderActiveBans(); return; }
+      if(pageId === "nodeops"){ loadNodeSSHCreds().then(()=>renderNodeSshNodes()); return; }
+      if(pageId === "sshterm"){ renderSshterm(); initSstResizeObserver(); return; }
+      if(pageId === "permanent-ban"){ renderPermBan(); return; }
+      if(pageId === "net"){ renderNet(); return; }
+      if(pageId === "shared"){ renderShared(); return; }
+      if(pageId === "logs"){ renderLogs(); return; }
+      if(pageId === "hwid"){ renderHwid(); return; }
+      if(pageId === "settings"){ renderConfig(); return; }
+    }
+
     function switchPage(pageId, title){
       document.querySelectorAll(".menu").forEach(x=>x.classList.remove("active"));
       const activeBtn = document.querySelector(`.menu[data-p="${pageId}"]`);
@@ -1807,6 +3899,7 @@
       if(target) target.classList.add("active");
       const cp = $("currentPage");
       if(cp) cp.textContent = title || (activeBtn ? activeBtn.dataset.title : "Панель");
+      renderPageContents(pageId);
     }
 
     // Event listeners
@@ -1817,14 +3910,71 @@
     $("loginPass").onkeydown=e=>{ if(e.key==="Enter") login(); };
     $("closeM").onclick=()=>{ $("modal").classList.remove("active"); openCardId=null; };
     $("modal").onclick=e=>{ if(e.target===$("modal")){ $("modal").classList.remove("active"); openCardId=null; } };
+    $("nodeDrawerClose").onclick=closeNodeDrawer;
+    $("nodeDrawerBackdrop").onclick=closeNodeDrawer;
     $("qUser").oninput=()=>{ usersPage=0; renderUsers(); };
     $("fState").onchange=()=>{ usersPage=0; renderUsers(); };
     $("fNode").onchange=()=>{ usersPage=0; renderUsers(); };
+    if($("fHotNode")) $("fHotNode").onchange=()=>renderHotUsers();
+    $("qTraffic").oninput=renderTraffic;
+    $("fTrafficTariff").onchange=renderTraffic;
+    $("fTrafficNode").onchange=renderTraffic;
+    $("fTrafficStatus").onchange=renderTraffic;
+    document.querySelectorAll("#trafficPeriodGroup .seg-btn").forEach(btn=>btn.onclick=()=>setTrafficPeriod(btn.dataset.period));
     $("changePassBtn").onclick=changePassword;
+    if($("saveOverridesBtn")) $("saveOverridesBtn").onclick=saveRuntimeOverrides;
+    if($("resetOverridesBtn")) $("resetOverridesBtn").onclick=resetRuntimeOverrides;
     $("sidebarToggle").onclick=toggleSidebar;
     $("globalSearch").onkeydown=e=>{ if(e.key==="Enter") globalSearch(); };
     $("exportViolatorsBtn").onclick=exportViolators;
     $("exportBanBtn").onclick=exportBanList;
+    $("trafficExportBtn").onclick=exportTrafficCSV;
+    $("nodeSshSelectAll").onclick=()=>nodeSshSelect("all");
+    $("nodeSshSelectOnline").onclick=()=>nodeSshSelect("online");
+    $("nodeSshClear").onclick=()=>nodeSshSelect("none");
+    $("nodeSshRefresh").onclick=()=>liveRefresh();
+    $("nodeSshRunSingle").onclick=runNodeSshSingleCommand;
+    $("nodeSshRun").onclick=runNodeSshCommand;
+    $("nodeSshRunAll").onclick=runNodeSshOnAll;
+    $("nodeSshOutputClear").onclick=clearNodeSshOutput;
+    $("nodeSshSingleClear").onclick=clearNodeSshOutput;
+    $("nodeSshSingleCommand").onkeydown=e=>{ if((e.ctrlKey||e.metaKey) && e.key==="Enter"){ runNodeSshSingleCommand(); } };
+    $("nodeSshCommand").onkeydown=e=>{ if((e.ctrlKey||e.metaKey) && e.key==="Enter"){ runNodeSshCommand(); } };
+    // Credentials modal
+    $("credModalClose").onclick=closeNodeCredModal;
+    $("credCancelBtn").onclick=closeNodeCredModal;
+    $("credModalBackdrop").onclick=closeNodeCredModal;
+    $("credSaveBtn").onclick=saveNodeCred;
+    $("credDeleteBtn").onclick=deleteNodeCred;
+    $("credOpenTermBtn").onclick=()=>{
+      const key = credModalNodeKey;
+      if(!key) return;
+      closeNodeCredModal();
+      switchPage("sshterm", "SSH Терминал");
+      setTimeout(()=>{
+        const sel = $("sstNodeSelect");
+        if(sel){ sel.value = key; }
+        openSstTerminal(key);
+      }, 150);
+    };
+    $("credPwToggle").onclick=()=>{
+      const pw=$("credPassword");
+      if(!pw) return;
+      pw.type = pw.type==="password" ? "text" : "password";
+    };
+    $("credUser").onkeydown=e=>{ if(e.key==="Enter") $("credPassword")?.focus(); };
+    $("credPassword").onkeydown=e=>{
+      if(e.key === "Enter"){
+        e.preventDefault();
+        $("credPrivateKey")?.focus();
+      }
+    };
+    $("credPrivateKey").onkeydown=e=>{ if((e.ctrlKey||e.metaKey) && e.key==="Enter") saveNodeCred(); };
+    document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeNodeCredModal(); });
+    // SSH Terminal page
+    $("sstConnect").onclick=()=>openSstTerminal(String($("sstNodeSelect")?.value||"").trim());
+    $("sstDisconnectAll").onclick=closeSstAll;
+    $("sstNodeSelect").onkeydown=e=>{ if(e.key==="Enter") openSstTerminal(String($("sstNodeSelect")?.value||"").trim()); };
 
     // Violator bulk actions
     $("violCheckAll").onchange=function(){
@@ -1840,6 +3990,22 @@
       document.querySelectorAll(".viol-cb").forEach(cb=>cb.checked=false);
       $("violCheckAll").checked=false;
       updateViolBulkBar();
+    };
+
+    // Users bulk actions
+    $("usersCheckAll").onchange=function(){
+      const cbs = document.querySelectorAll(".user-cb");
+      usersSel = new Set();
+      cbs.forEach(cb=>{ cb.checked=this.checked; if(this.checked&&cb.dataset.id) usersSel.add(cb.dataset.id); });
+      updateUsersBulkBar();
+    };
+    $("usersBulkBlock").onclick=()=>bulkBlockUsers(usersSel);
+    $("usersBulkUnblock").onclick=()=>bulkUnban(usersSel);
+    $("usersBulkDeselect").onclick=()=>{
+      usersSel=new Set();
+      document.querySelectorAll(".user-cb").forEach(cb=>cb.checked=false);
+      const allCb=$("usersCheckAll"); if(allCb) allCb.checked=false;
+      updateUsersBulkBar();
     };
 
     // Ban bulk actions
@@ -1866,7 +4032,12 @@
       };
     });
 
-    document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") load(true); });
+    document.addEventListener("keydown", (e)=>{
+      if(e.key === "Escape" && $("nodeDrawer")?.classList.contains("active")){
+        closeNodeDrawer();
+      }
+    });
+    document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") liveRefresh(); });
     checkAuth();
   </script>
 </body>

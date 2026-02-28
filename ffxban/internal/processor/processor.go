@@ -31,21 +31,30 @@ type LogProcessor struct {
 	// OnBatchProcessed вызывается после обработки каждой пачки логов.
 	// Используется для уведомления WebSocket-клиентов панели об изменениях данных.
 	OnBatchProcessed func()
-	eventsMu          sync.RWMutex
-	recentEvents      map[string][]userEvent
-	lastNode          map[string]string
-	lastNetworkType   map[string]string
-	lastNodeSwitchAt  map[string]time.Time
-	lastNodeParallel  map[string]string
-	ipLastNode        map[string]map[string]string
-	lastSeenAt        map[string]time.Time
-	lastBlockedIPs    map[string][]string
-	heuristics        map[string]models.HeuristicMetrics
-	history           map[string][]models.UserEventLog
-	activeBans        map[string]activeBanState
-	nodeState         map[string]models.NodeRuntimeState
-	sharingState      map[string]*sharingState
-	historyLimit      int
+	eventsMu         sync.RWMutex
+	recentEvents     map[string][]userEvent
+	lastNode         map[string]string
+	lastNetworkType  map[string]string
+	lastNodeSwitchAt map[string]time.Time
+	lastNodeParallel map[string]string
+	ipLastNode       map[string]map[string]string
+	lastSeenAt       map[string]time.Time
+	lastBlockedIPs   map[string][]string
+	heuristics       map[string]models.HeuristicMetrics
+	history          map[string][]models.UserEventLog
+	activeBans       map[string]activeBanState
+	nodeState        map[string]models.NodeRuntimeState
+	sharingState     map[string]*sharingState
+	historyLimit     int
+	runtimeMu        sync.RWMutex
+	runtimeOverrides RuntimeOverrides
+}
+
+// RuntimeOverrides хранит runtime-переопределения критичных лимитов.
+type RuntimeOverrides struct {
+	MaxIPsPerUser int
+	BlockDuration string
+	TriggerCount  int
 }
 
 type userEvent struct {
@@ -121,6 +130,50 @@ func NewLogProcessor(
 		sharingState:      make(map[string]*sharingState),
 		historyLimit:      500,
 	}
+}
+
+// SetRuntimeOverrides применяет runtime-override значения (без рестарта процесса).
+func (p *LogProcessor) SetRuntimeOverrides(overrides RuntimeOverrides) {
+	p.runtimeMu.Lock()
+	p.runtimeOverrides = overrides
+	p.runtimeMu.Unlock()
+}
+
+// GetRuntimeOverrides возвращает текущие runtime-override значения.
+func (p *LogProcessor) GetRuntimeOverrides() RuntimeOverrides {
+	p.runtimeMu.RLock()
+	defer p.runtimeMu.RUnlock()
+	return p.runtimeOverrides
+}
+
+func (p *LogProcessor) runtimeMaxIPsPerUser() int {
+	p.runtimeMu.RLock()
+	override := p.runtimeOverrides.MaxIPsPerUser
+	p.runtimeMu.RUnlock()
+	if override > 0 {
+		return override
+	}
+	return p.cfg.MaxIPsPerUser
+}
+
+func (p *LogProcessor) runtimeBlockDuration() string {
+	p.runtimeMu.RLock()
+	override := strings.TrimSpace(p.runtimeOverrides.BlockDuration)
+	p.runtimeMu.RUnlock()
+	if override != "" {
+		return override
+	}
+	return p.cfg.BlockDuration
+}
+
+func (p *LogProcessor) runtimeTriggerCount() int {
+	p.runtimeMu.RLock()
+	override := p.runtimeOverrides.TriggerCount
+	p.runtimeMu.RUnlock()
+	if override > 0 {
+		return override
+	}
+	return p.cfg.TriggerCount
 }
 
 // StartWorkerPool запускает пул горутин-воркеров для обработки логов.
@@ -432,12 +485,12 @@ func (p *LogProcessor) processSingleEntry(ctx context.Context, entry models.LogE
 		if len(ipsToBlock) > 0 {
 			var blockErr error
 			// Block IPs (Remnawave/RabbitMQ)
-			if err := p.blocker.BlockIPs(ipsToBlock, p.cfg.BlockDuration); err != nil {
+			if err := p.blocker.BlockIPs(ipsToBlock, p.runtimeBlockDuration()); err != nil {
 				blockErr = err
 				log.Printf("Ошибка отправки сообщения о блокировке IP: %v", err)
 			}
-			// Block User (3x-ui)
-			if err := p.blocker.BlockUser(entry.UserEmail, p.cfg.BlockDuration); err != nil {
+			// User-level blocking (no-op in RabbitMQ mode).
+			if err := p.blocker.BlockUser(entry.UserEmail, p.runtimeBlockDuration()); err != nil {
 				if blockErr == nil {
 					blockErr = err
 				} else {
@@ -482,7 +535,7 @@ func (p *LogProcessor) processSingleEntry(ctx context.Context, entry models.LogE
 			DetectedIPsCount: len(activeIPs),
 			Limit:            userIPLimit,
 			AllUserIPs:       activeIPs,
-			BlockDuration:    p.cfg.BlockDuration,
+			BlockDuration:    p.runtimeBlockDuration(),
 			ViolationType:    "sharing_suspected",
 			NodeName:         entry.NodeName,
 			NetworkType:      netSummary.DominantType,
@@ -1324,10 +1377,11 @@ func (p *LogProcessor) sharingTriggerPeriod() time.Duration {
 }
 
 func (p *LogProcessor) sharingTriggerCount() int {
-	if p.cfg.TriggerCount < 1 {
+	triggerCount := p.runtimeTriggerCount()
+	if triggerCount < 1 {
 		return 5
 	}
-	return p.cfg.TriggerCount
+	return triggerCount
 }
 
 func (p *LogProcessor) sharingTriggerMinInterval() time.Duration {
@@ -1537,6 +1591,60 @@ func (p *LogProcessor) GetLastSeenAt(userEmail string) (time.Time, bool) {
 // GetQueueStats возвращает текущую загрузку очередей обработчика.
 func (p *LogProcessor) GetQueueStats() (logQueueLen int, sideEffectQueueLen int) {
 	return len(p.logChannel), len(p.sideEffectChannel)
+}
+
+// CountActiveSessions возвращает число активных пользовательских сессий за окно времени.
+func (p *LogProcessor) CountActiveSessions(window time.Duration) int {
+	if window <= 0 {
+		window = 3 * time.Minute
+	}
+	cutoff := time.Now().Add(-window)
+	count := 0
+
+	p.eventsMu.RLock()
+	for _, seenAt := range p.lastSeenAt {
+		if !seenAt.IsZero() && (seenAt.After(cutoff) || seenAt.Equal(cutoff)) {
+			count++
+		}
+	}
+	p.eventsMu.RUnlock()
+
+	return count
+}
+
+// WaitDrained ожидает опустошения обеих очередей обработчика.
+// Возвращает true, если очереди стабильно пустые, иначе false по таймауту контекста.
+func (p *LogProcessor) WaitDrained(ctx context.Context, stableFor time.Duration) bool {
+	if stableFor <= 0 {
+		stableFor = 500 * time.Millisecond
+	}
+	tick := 100 * time.Millisecond
+	stableRequired := int(stableFor / tick)
+	if stableRequired < 1 {
+		stableRequired = 1
+	}
+
+	stableTicks := 0
+	ticker := time.NewTicker(tick)
+	defer ticker.Stop()
+
+	for {
+		logQueueLen, sideQueueLen := p.GetQueueStats()
+		if logQueueLen == 0 && sideQueueLen == 0 {
+			stableTicks++
+			if stableTicks >= stableRequired {
+				return true
+			}
+		} else {
+			stableTicks = 0
+		}
+
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+		}
+	}
 }
 
 // GetUserHistory возвращает историю событий пользователя в обратном хронологическом порядке.

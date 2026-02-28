@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"log"
 	"os"
 	"strconv"
@@ -86,18 +85,15 @@ type Config struct {
 	GeoSharingEnabled           bool
 	GeoSharingMinCountries      int
 	PrometheusEnabled           bool
-
-	// 3x-ui Configuration
-	ThreexuiEnabled   bool
-	ThreexuiServers   []ThreexuiServer
-	ThreexuiBlockMode string // "api_only", "api_and_nftables"
-}
-
-type ThreexuiServer struct {
-	Name     string `json:"name"`
-	URL      string `json:"url"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	NodeSSHEnabled              bool
+	NodeSSHUser                 string
+	NodeSSHPassword             string
+	NodeSSHPrivateKey           string
+	NodeSSHDefaultPort          int
+	NodeSSHConnectTimeout       time.Duration
+	NodeSSHCommandTimeout       time.Duration
+	NodeSSHMaxParallel          int
+	NodeSSHMaxOutputBytes       int
 }
 
 // New загружает конфигурацию из переменных окружения.
@@ -178,9 +174,15 @@ func New() *Config {
 		GeoSharingEnabled:           getEnvBool("GEO_SHARING_ENABLED", false),
 		GeoSharingMinCountries:      getEnvInt("GEO_SHARING_MIN_COUNTRIES", 2),
 		PrometheusEnabled:           getEnvBool("PROMETHEUS_ENABLED", false),
-		ThreexuiEnabled:             getEnvBool("THREEXUI_ENABLED", false),
-		ThreexuiServers:             parseThreexuiServers(getEnv("THREEXUI_SERVERS", "[]")),
-		ThreexuiBlockMode:           getEnv("THREEXUI_BLOCK_MODE", "api_only"),
+		NodeSSHEnabled:              getEnvBool("NODE_SSH_ENABLED", false),
+		NodeSSHUser:                 strings.TrimSpace(getEnv("NODE_SSH_USER", "")),
+		NodeSSHPassword:             getEnv("NODE_SSH_PASSWORD", ""),
+		NodeSSHPrivateKey:           getEnv("NODE_SSH_PRIVATE_KEY", ""),
+		NodeSSHDefaultPort:          getEnvInt("NODE_SSH_DEFAULT_PORT", 22),
+		NodeSSHConnectTimeout:       time.Duration(getEnvInt("NODE_SSH_CONNECT_TIMEOUT_SECONDS", 8)) * time.Second,
+		NodeSSHCommandTimeout:       time.Duration(getEnvInt("NODE_SSH_COMMAND_TIMEOUT_SECONDS", 45)) * time.Second,
+		NodeSSHMaxParallel:          getEnvInt("NODE_SSH_MAX_PARALLEL", 5),
+		NodeSSHMaxOutputBytes:       getEnvInt("NODE_SSH_MAX_OUTPUT_BYTES", 262144),
 	}
 	if cfg.SharingPermanentBanDuration == "" {
 		cfg.SharingPermanentBanDuration = "permanent"
@@ -288,20 +290,17 @@ func New() *Config {
 		cfg.GeoSharingMinCountries,
 	)
 	log.Printf("Prometheus metrics: enabled=%t", cfg.PrometheusEnabled)
+	log.Printf(
+		"Node SSH control: enabled=%t user_set=%t default_port=%d connect_timeout=%v command_timeout=%v max_parallel=%d",
+		cfg.NodeSSHEnabled,
+		strings.TrimSpace(cfg.NodeSSHUser) != "",
+		cfg.NodeSSHDefaultPort,
+		cfg.NodeSSHConnectTimeout,
+		cfg.NodeSSHCommandTimeout,
+		cfg.NodeSSHMaxParallel,
+	)
 
 	return cfg
-}
-
-func parseThreexuiServers(jsonStr string) []ThreexuiServer {
-	var servers []ThreexuiServer
-	if jsonStr == "" {
-		return nil
-	}
-	if err := json.Unmarshal([]byte(jsonStr), &servers); err != nil {
-		log.Printf("Ошибка парсинга THREEXUI_SERVERS: %v", err)
-		return nil
-	}
-	return servers
 }
 
 func getEnv(key, defaultValue string) string {

@@ -1,12 +1,15 @@
 .claude/
 *.local.json
+.deploy_tmp/
 
 # Local secrets / runtime configs
 ffxban_conf/.env
 ffxban_conf/.env.fixed
+github_pat_*
 
 # Local build artifacts
 ffxban-linux-amd64
+ffxban/ffxban_linux
 ffxban_conf/ffxban-custom
 ffxban_agent/blocker-worker
 *.exe
@@ -14,6 +17,11 @@ ffxban_agent/blocker-worker
 # Certs/keys
 *.pem
 *.key
+
+# Temp/logs/backups
+*.log
+*.bak
+*.bak-*
 
 # OS/editor
 .DS_Store

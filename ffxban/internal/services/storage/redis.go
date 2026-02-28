@@ -37,6 +37,13 @@ end
 return redis.call('DEL', unpack(keysToDelete))
 `
 
+// NodeSSHCreds хранит учётные данные SSH для отдельной ноды.
+type NodeSSHCreds struct {
+	User       string `json:"user"`
+	Password   string `json:"password"`
+	PrivateKey string `json:"private_key,omitempty"`
+}
+
 // IPStorage определяет интерфейс для работы с хранилищем IP-адресов.
 type IPStorage interface {
 	CheckAndAddIP(ctx context.Context, email, ip string, limit int, ttl, cooldown time.Duration) (*models.CheckResult, error)
@@ -57,6 +64,12 @@ type IPStorage interface {
 	Close() error
 	SaveDeviceReport(ctx context.Context, userEmail, userAgent string, now time.Time) error
 	GetUserDeviceReports(ctx context.Context, userEmail string) ([]models.DeviceInfo, error)
+	GetNodeSSHCreds(ctx context.Context, nodeKey string) (NodeSSHCreds, bool, error)
+	SetNodeSSHCreds(ctx context.Context, nodeKey string, creds NodeSSHCreds) error
+	DeleteNodeSSHCreds(ctx context.Context, nodeKey string) error
+	ListNodeSSHCreds(ctx context.Context) (map[string]NodeSSHCreds, error)
+	GetConfigOverrides(ctx context.Context) (map[string]string, error)
+	SetConfigOverrides(ctx context.Context, overrides map[string]string) error
 }
 
 // RedisStore реализует IPStorage с использованием Redis.
@@ -829,4 +842,100 @@ func (s *RedisStore) Ping(ctx context.Context) error {
 // Close закрывает соединение с Redis.
 func (s *RedisStore) Close() error {
 	return s.client.Close()
+}
+
+// GetNodeSSHCreds возвращает SSH-учётные данные для ноды по её ключу.
+func (s *RedisStore) GetNodeSSHCreds(ctx context.Context, nodeKey string) (NodeSSHCreds, bool, error) {
+	key := "node:ssh_creds:" + nodeKey
+	val, err := s.client.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return NodeSSHCreds{}, false, nil
+	}
+	if err != nil {
+		return NodeSSHCreds{}, false, err
+	}
+	var creds NodeSSHCreds
+	if err := json.Unmarshal([]byte(val), &creds); err != nil {
+		return NodeSSHCreds{}, false, err
+	}
+	return creds, true, nil
+}
+
+// SetNodeSSHCreds сохраняет SSH-учётные данные для ноды.
+func (s *RedisStore) SetNodeSSHCreds(ctx context.Context, nodeKey string, creds NodeSSHCreds) error {
+	key := "node:ssh_creds:" + nodeKey
+	data, err := json.Marshal(creds)
+	if err != nil {
+		return err
+	}
+	return s.client.Set(ctx, key, string(data), 0).Err()
+}
+
+// DeleteNodeSSHCreds удаляет SSH-учётные данные ноды.
+func (s *RedisStore) DeleteNodeSSHCreds(ctx context.Context, nodeKey string) error {
+	key := "node:ssh_creds:" + nodeKey
+	return s.client.Del(ctx, key).Err()
+}
+
+// ListNodeSSHCreds возвращает все сохранённые SSH-учётные данные нод.
+func (s *RedisStore) ListNodeSSHCreds(ctx context.Context) (map[string]NodeSSHCreds, error) {
+	keys, err := s.client.Keys(ctx, "node:ssh_creds:*").Result()
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]NodeSSHCreds, len(keys))
+	for _, k := range keys {
+		nodeKey := strings.TrimPrefix(k, "node:ssh_creds:")
+		val, err := s.client.Get(ctx, k).Result()
+		if err != nil {
+			continue
+		}
+		var creds NodeSSHCreds
+		if json.Unmarshal([]byte(val), &creds) == nil {
+			result[nodeKey] = creds
+		}
+	}
+	return result, nil
+}
+
+// GetConfigOverrides возвращает runtime-overrides конфигурации панели.
+func (s *RedisStore) GetConfigOverrides(ctx context.Context) (map[string]string, error) {
+	raw, err := s.client.HGetAll(ctx, "config:overrides").Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(raw))
+	for k, v := range raw {
+		key := strings.TrimSpace(k)
+		val := strings.TrimSpace(v)
+		if key == "" || val == "" {
+			continue
+		}
+		out[key] = val
+	}
+	return out, nil
+}
+
+// SetConfigOverrides сохраняет runtime-overrides конфигурации панели.
+func (s *RedisStore) SetConfigOverrides(ctx context.Context, overrides map[string]string) error {
+	pipe := s.client.TxPipeline()
+	pipe.Del(ctx, "config:overrides")
+
+	if len(overrides) > 0 {
+		payload := make(map[string]any, len(overrides))
+		for k, v := range overrides {
+			key := strings.TrimSpace(k)
+			val := strings.TrimSpace(v)
+			if key == "" || val == "" {
+				continue
+			}
+			payload[key] = val
+		}
+		if len(payload) > 0 {
+			pipe.HSet(ctx, "config:overrides", payload)
+		}
+	}
+
+	_, err := pipe.Exec(ctx)
+	return err
 }

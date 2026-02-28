@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"sync"
@@ -71,15 +72,36 @@ func (h *wsHub) Notify() {
 }
 
 func (h *wsHub) broadcast() {
+	h.broadcastMessage(wsRefreshMsg)
+}
+
+func (h *wsHub) broadcastMessage(msg []byte) {
+	if len(msg) == 0 {
+		return
+	}
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
 		select {
-		case c.send <- wsRefreshMsg:
+		case c.send <- msg:
 		default:
 			// Медленный клиент — скип, не блокируем
 		}
 	}
+}
+
+// BroadcastJSON отправляет произвольное JSON-событие всем WS-клиентам.
+func (h *wsHub) BroadcastJSON(payload any) {
+	if payload == nil {
+		return
+	}
+	msg, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("WS marshal error: %v", err)
+		return
+	}
+	h.broadcastMessage(msg)
 }
 
 func (h *wsHub) register(c *wsClient) {
