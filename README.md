@@ -14,7 +14,7 @@
 - [Как работает система](#как-работает-система)
 - [Архитектура](#архитектура)
 - [Структура репозитория](#структура-репозитория)
-- [Пошаговая установка и настройка (Observer)](#пошаговая-установка-и-настройка-observer)
+- [Пошаговая установка и настройка (FFXBan)](#пошаговая-установка-и-настройка-ffxban)
 - [Установка и подключение нод (агенты)](#установка-и-подключение-нод-агенты)
 - [Проверка после установки (чек-лист)](#проверка-после-установки-чек-лист)
 - [SSH-управление нодами из админки](#ssh-управление-нодами-из-админки)
@@ -56,8 +56,8 @@
 ## Как работает система
 
 1. Нода пишет логи подключений (Xray/Remnawave) в файл.
-2. `Vector` на ноде парсит лог, формирует JSON и отправляет на Observer (`/log-entry` через nginx).
-3. `Vector Aggregator` на Observer принимает батчи и проксирует в `ffxban`.
+2. `Vector` на ноде парсит лог, формирует JSON и отправляет на сервер FFXBan (`/log-entry` через nginx).
+3. `Vector Aggregator` на сервере FFXBan принимает батчи и проксирует в `ffxban`.
 4. `ffxban` сохраняет и анализирует состояние в Redis (IP, TTL, триггеры, статусы, события).
 5. При необходимости `ffxban` публикует команду block/unblock в RabbitMQ.
 6. `blocker-worker` на каждой ноде читает очередь и применяет `nft`-команды в `nftables set`.
@@ -72,9 +72,9 @@
 flowchart LR
   U[Пользователи VPN] --> N[VPN ноды]
   N --> VL[Vector на ноде]
-  VL -->|HTTPS /log-entry| NX1[Nginx Observer]
+  VL -->|HTTPS /log-entry| NX1[Nginx FFXBan]
   NX1 --> VA[Vector Aggregator]
-  VA --> OBS[FFXBan Observer API]
+  VA --> OBS[FFXBan API]
 
   OBS <--> R[(Redis)]
   OBS -->|block/unblock| MQ[(RabbitMQ)]
@@ -97,7 +97,7 @@ flowchart LR
 
 ```text
 ffxban/                # основной сервис (API, панель, обработка, Redis/RabbitMQ интеграции)
-ffxban_conf/           # docker-compose и конфиги Observer (nginx, vector, env-example)
+ffxban_conf/           # docker-compose и конфиги FFXBan (nginx, vector, env-example)
 ffxban_agent/          # скрипты deploy/install/uninstall для нод
 ffxban_blocker/        # исходники blocker-worker (применяет nftables-команды)
 ffxban_blocker_conf/   # пример docker-compose и vector-конфиг для blocker-ноды
@@ -106,7 +106,7 @@ docs/                  # служебные документы/ассеты
 
 ---
 
-## Пошаговая установка и настройка (Observer)
+## Пошаговая установка и настройка (FFXBan)
 
 Ниже инструкция для “чистой” установки центрального сервера FFXBan.
 
@@ -115,7 +115,7 @@ docs/                  # служебные документы/ассеты
 - Сервер с Linux (Ubuntu/Debian).
 - Домен(ы), которые укажете в `nginx.conf`.
 - TLS-сертификат(ы) для этих доменов (например Let's Encrypt).
-- Открытые порты на Observer:
+- Открытые порты на сервере FFXBan:
   - `443/tcp` — панель и входящий HTTPS;
   - `38213/tcp` — прием логов от нод через nginx;
   - `5672/tcp` — RabbitMQ для blocker-нод (лучше ограничить только IP нод).
@@ -187,7 +187,7 @@ EXCLUDED_IPS=127.0.0.1
 
 Замените:
 
-- `observer.example.com` / `panel.observer.example.com`
+- `ffxban.example.com` / `panel.ffxban.example.com`
 - пути к сертификатам `/etc/letsencrypt/live/...`
 
 Проверьте, что сертификаты реально существуют на сервере:
@@ -241,11 +241,11 @@ curl -k https://panel.<ваш-домен>/health
 
 ## Установка и подключение нод (агенты)
 
-Ниже самый понятный и быстрый путь: запуск `deploy.sh` с Observer.
+Ниже самый понятный и быстрый путь: запуск `deploy.sh` с сервера FFXBan.
 
-### Вариант A (рекомендуется): автоматический deploy с Observer
+### Вариант A (рекомендуется): автоматический deploy с сервера FFXBan
 
-Запуск на сервере Observer:
+Запуск на сервере FFXBan:
 
 ```bash
 cd FFX/ffxban_agent
@@ -253,7 +253,7 @@ NODE_NAME="Latvia" \
 NODE_IP="1.2.3.4" \
 NODE_USER="root" \
 RABBITMQ_URL="amqp://ffxban:пароль@<IP_OBSERVER>:5672/" \
-OBSERVER_DOMAIN="observer.example.com" \
+OBSERVER_DOMAIN="ffxban.example.com" \
 bash deploy.sh
 ```
 
@@ -263,7 +263,7 @@ bash deploy.sh
 - передаст бинарник и `install.sh` на ноду;
 - установит systemd-сервис blocker;
 - поднимет `ffxban-vector` в Docker на ноде;
-- настроит парсинг логов и отправку в Observer.
+- настроит парсинг логов и отправку на сервер FFXBan.
 
 Проверка на ноде:
 
@@ -283,7 +283,7 @@ docker logs --tail=50 ffxban-vector
 ```bash
 sudo NODE_NAME="Latvia" \
 RABBITMQ_URL="amqp://ffxban:пароль@<IP_OBSERVER>:5672/" \
-OBSERVER_DOMAIN="observer.example.com" \
+OBSERVER_DOMAIN="ffxban.example.com" \
 bash install.sh
 ```
 
@@ -300,7 +300,7 @@ sudo bash uninstall.sh
 Пройдите по порядку:
 
 1. В панели `Nodes` нода отображается и heartbeat обновляется.
-2. На Observer в логах нет постоянных ошибок RabbitMQ/Redis.
+2. На сервере FFXBan в логах нет постоянных ошибок RabbitMQ/Redis.
 3. На ноде `ffxban-blocker` в статусе `active (running)`.
 4. На ноде контейнер `ffxban-vector` запущен.
 5. В панели появляются свежие события в логах пользователей.
@@ -378,7 +378,7 @@ sudo nft list set inet firewall user_blacklist
 
 ## API и интерфейс
 
-Основные публичные endpoints Observer:
+Основные публичные endpoints FFXBan:
 
 - `POST /log-entry` — входящий поток логов.
 - `POST /node-heartbeat` — heartbeat ноды.
@@ -404,7 +404,7 @@ Live-обновления:
 ### Полезные команды
 
 ```bash
-# Observer
+# FFXBan server
 docker logs -f ffxban
 docker logs -f ffxban-nginx-proxy
 docker logs -f ffxban-vector-aggregator
@@ -422,7 +422,7 @@ docker exec -it ffxban-redis redis-cli ping
 `blocker-worker` не отправляет heartbeat, проверьте `journalctl -u ffxban-blocker -f`.
 
 2. Нет входящих логов:
-проверьте `Vector` на ноде и доступность `https://observer-domain:38213/`.
+проверьте `Vector` на ноде и доступность `https://ffxban-domain:38213/`.
 
 3. SSH `unable to authenticate`:
 проверьте credentials в UI (кнопка с шестеренкой у ноды) или глобальные `NODE_SSH_*`.
