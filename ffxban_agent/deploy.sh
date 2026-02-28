@@ -20,6 +20,14 @@ warn()   { echo -e "${YELLOW}[!]${NC} $*"; }
 fail()   { echo -e "${RED}[✗]${NC} $*"; exit 1; }
 ask()    { echo -e "${BLUE}[?]${NC} $*"; }
 header() { echo -e "\n${BLUE}━━━ $* ━━━${NC}"; }
+sanitize_domain() {
+    local v="$1"
+    v="${v#http://}"
+    v="${v#https://}"
+    v="${v%%/*}"
+    v="${v%%:*}"
+    echo "${v}"
+}
 
 # --- Директория со скриптом (ffxban_agent/) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,6 +35,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "${SCRIPT_DIR}")"
 BLOCKER_SRC="${PROJECT_ROOT}/ffxban_blocker"
 REMOTE_TMP="/tmp/ffxban-install"
+BINARY_OUT="${SCRIPT_DIR}/blocker-worker"
 
 echo ""
 echo "╔══════════════════════════════════════╗"
@@ -65,12 +74,15 @@ if [ -z "${SSH_KEY:-}" ]; then
     read -r SSH_KEY
 fi
 
-SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=15 -o BatchMode=yes"
+command -v ssh &>/dev/null || fail "ssh не найден. Установите openssh-client"
+command -v scp &>/dev/null || fail "scp не найден. Установите openssh-client"
+
+SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=15)
 if [ -n "${SSH_KEY:-}" ] && [ -f "${SSH_KEY}" ]; then
-    SSH_OPTS="${SSH_OPTS} -i ${SSH_KEY}"
+    SSH_OPTS+=(-o BatchMode=yes -i "${SSH_KEY}")
     ok "SSH-ключ: ${SSH_KEY}"
 else
-    warn "SSH-ключ не задан — будет использован ssh-agent или ключ по умолчанию"
+    warn "SSH-ключ не задан — возможен интерактивный ввод пароля"
 fi
 
 if [ -z "${RABBITMQ_URL:-}" ]; then
@@ -83,7 +95,8 @@ if [ -z "${OBSERVER_DOMAIN:-}" ]; then
     ask "Домен Observer (например observer.example.com):"
     read -r OBSERVER_DOMAIN
 fi
-[ -n "${OBSERVER_DOMAIN:-}" ] || fail "OBSERVER_DOMAIN не задан"
+OBSERVER_DOMAIN="$(sanitize_domain "${OBSERVER_DOMAIN:-}")"
+[ -n "${OBSERVER_DOMAIN}" ] || fail "OBSERVER_DOMAIN не задан"
 
 NFT_TABLE="${NFT_TABLE:-firewall}"
 NFT_SET="${NFT_SET:-user_blacklist}"
@@ -102,27 +115,39 @@ echo ""
 # =============================================================================
 header "Сборка blocker-worker"
 
-command -v go &>/dev/null || fail "Go не установлен. Установите: https://go.dev/dl/"
-
 [ -d "${BLOCKER_SRC}" ] || fail "Директория исходников не найдена: ${BLOCKER_SRC}"
 [ -f "${BLOCKER_SRC}/go.mod" ] || fail "go.mod не найден в ${BLOCKER_SRC}"
 
-BINARY_OUT="${SCRIPT_DIR}/blocker-worker"
-
-echo "  Компиляция для linux/amd64..."
-(
-    cd "${BLOCKER_SRC}"
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-        go build -ldflags="-w -s" -o "${BINARY_OUT}" ./cmd/blocker_worker
-)
-ok "Бинарник собран: ${BINARY_OUT} ($(du -sh "${BINARY_OUT}" | cut -f1))"
+if command -v go &>/dev/null; then
+    echo "  Компиляция для linux/amd64..."
+    (
+        cd "${BLOCKER_SRC}"
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags="-w -s" -o "${BINARY_OUT}" ./cmd/blocker_worker
+    )
+    ok "Бинарник собран: ${BINARY_OUT} ($(du -sh "${BINARY_OUT}" | cut -f1))"
+elif command -v docker &>/dev/null; then
+    warn "Go не найден — пробуем собрать blocker-worker через Docker (golang image)"
+    docker run --rm \
+        -v "${PROJECT_ROOT}:/src" \
+        -w /src/ffxban_blocker \
+        golang:1.24-alpine \
+        sh -lc 'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /src/ffxban_agent/blocker-worker ./cmd/blocker_worker' \
+        || fail "Не удалось собрать blocker-worker через Docker"
+    ok "Бинарник собран через Docker: ${BINARY_OUT} ($(du -sh "${BINARY_OUT}" | cut -f1))"
+elif [ -f "${BINARY_OUT}" ]; then
+    chmod +x "${BINARY_OUT}" || true
+    warn "Go не найден — используем уже существующий бинарник: ${BINARY_OUT}"
+else
+    fail "Go/Docker не найдены и ${BINARY_OUT} отсутствует. Установите Go, либо Docker, либо положите готовый blocker-worker рядом с deploy.sh"
+fi
 
 # =============================================================================
 # 3. Проверка SSH-доступа
 # =============================================================================
 header "Проверка подключения к ноде"
 
-ssh ${SSH_OPTS} "${NODE_USER}@${NODE_IP}" "echo ok" &>/dev/null \
+ssh "${SSH_OPTS[@]}" "${NODE_USER}@${NODE_IP}" "echo ok" &>/dev/null \
     || fail "Не удаётся подключиться по SSH к ${NODE_USER}@${NODE_IP}"
 ok "SSH-доступ: есть"
 
@@ -131,14 +156,14 @@ ok "SSH-доступ: есть"
 # =============================================================================
 header "Копирование файлов"
 
-ssh ${SSH_OPTS} "${NODE_USER}@${NODE_IP}" "mkdir -p ${REMOTE_TMP}"
+ssh "${SSH_OPTS[@]}" "${NODE_USER}@${NODE_IP}" "mkdir -p ${REMOTE_TMP}"
 
-scp ${SSH_OPTS} \
+scp "${SSH_OPTS[@]}" \
     "${BINARY_OUT}" \
     "${SCRIPT_DIR}/install.sh" \
     "${NODE_USER}@${NODE_IP}:${REMOTE_TMP}/"
 
-ssh ${SSH_OPTS} "${NODE_USER}@${NODE_IP}" "chmod +x ${REMOTE_TMP}/blocker-worker ${REMOTE_TMP}/install.sh"
+ssh "${SSH_OPTS[@]}" "${NODE_USER}@${NODE_IP}" "chmod +x ${REMOTE_TMP}/blocker-worker ${REMOTE_TMP}/install.sh"
 ok "Файлы скопированы в ${REMOTE_TMP} на ноде"
 
 # =============================================================================
@@ -146,21 +171,16 @@ ok "Файлы скопированы в ${REMOTE_TMP} на ноде"
 # =============================================================================
 header "Установка на ноде ${NODE_IP}"
 
-ssh ${SSH_OPTS} "${NODE_USER}@${NODE_IP}" \
-    "NODE_NAME='${NODE_NAME}' \
-     RABBITMQ_URL='${RABBITMQ_URL}' \
-     OBSERVER_DOMAIN='${OBSERVER_DOMAIN}' \
-     NFT_TABLE='${NFT_TABLE}' \
-     NFT_SET='${NFT_SET}' \
-     NFT_FAMILY='${NFT_FAMILY}' \
-     bash ${REMOTE_TMP}/install.sh"
+REMOTE_INSTALL_CMD="$(printf "NODE_NAME=%q RABBITMQ_URL=%q OBSERVER_DOMAIN=%q NFT_TABLE=%q NFT_SET=%q NFT_FAMILY=%q bash %q" \
+    "${NODE_NAME}" "${RABBITMQ_URL}" "${OBSERVER_DOMAIN}" "${NFT_TABLE}" "${NFT_SET}" "${NFT_FAMILY}" "${REMOTE_TMP}/install.sh")"
+ssh "${SSH_OPTS[@]}" "${NODE_USER}@${NODE_IP}" "${REMOTE_INSTALL_CMD}"
 
 # =============================================================================
 # 6. Очистка
 # =============================================================================
 header "Очистка"
 
-ssh ${SSH_OPTS} "${NODE_USER}@${NODE_IP}" "rm -rf ${REMOTE_TMP}" 2>/dev/null || true
+ssh "${SSH_OPTS[@]}" "${NODE_USER}@${NODE_IP}" "rm -rf ${REMOTE_TMP}" 2>/dev/null || true
 ok "Временные файлы удалены"
 
 echo ""
