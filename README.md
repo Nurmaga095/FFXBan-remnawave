@@ -134,8 +134,17 @@ docker compose version
 
 ### Шаг 2. Подготовить проект
 
+Клонируйте репозиторий (любой из вариантов):
+
+**Вариант 1 (SSH):**
 ```bash
-git clone <URL_ВАШЕГО_РЕПОЗИТОРИЯ> FFX
+git clone git@github.com:Nurmaga095/FFXBan-remnawave.git FFX
+cd FFX
+```
+
+**Вариант 2 (HTTPS):**
+```bash
+git clone https://github.com/Nurmaga095/FFXBan-remnawave.git FFX
 cd FFX
 ```
 
