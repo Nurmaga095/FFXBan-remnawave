@@ -138,13 +138,13 @@ docker compose version
 
 **Вариант 1 (SSH):**
 ```bash
-git clone git@github.com:Nurmaga095/FFXBan-remnawave.git FFX
+git clone git@github.com:<GITHUB_USERNAME>/<REPOSITORY_NAME>.git FFX
 cd FFX
 ```
 
 **Вариант 2 (HTTPS):**
 ```bash
-git clone https://github.com/Nurmaga095/FFXBan-remnawave.git FFX
+git clone https://github.com/<GITHUB_USERNAME>/<REPOSITORY_NAME>.git FFX
 cd FFX
 ```
 
@@ -242,6 +242,12 @@ curl -k https://panel.<ваш-домен>/health
 ## Установка и подключение нод (агенты)
 
 Ниже самый понятный и быстрый путь: запуск `deploy.sh` с сервера FFXBan.
+
+Скрипты агента:
+
+- [`deploy.sh`](./ffxban_agent/deploy.sh) — удалённый деплой на ноду по SSH.
+- [`install.sh`](./ffxban_agent/install.sh) — ручная установка на ноде.
+- [`uninstall.sh`](./ffxban_agent/uninstall.sh) — удаление агента с ноды.
 
 ### Вариант A (рекомендуется): автоматический deploy с сервера FFXBan
 
