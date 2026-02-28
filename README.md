@@ -2,473 +2,472 @@
 
 <p align="center">
   <b>Self-hosted anti-sharing платформа для VPN-инфраструктуры</b><br>
-  Анализирует подключения, выявляет подозрительное одновременное использование аккаунтов и управляет блокировками через RabbitMQ + nftables.
+  Анализирует подключения, выявляет одновременное использование аккаунтов и управляет блокировками через RabbitMQ + nftables.
 </p>
 
 ---
 
 ## Содержание
 
-- [Что это](#что-это)
-- [Ключевые возможности](#ключевые-возможности)
-- [Как работает система](#как-работает-система)
-- [Архитектура](#архитектура)
-- [Структура репозитория](#структура-репозитория)
-- [Пошаговая установка и настройка (FFXBan)](#пошаговая-установка-и-настройка-ffxban)
-- [Установка и подключение нод (агенты)](#установка-и-подключение-нод-агенты)
-- [Проверка после установки (чек-лист)](#проверка-после-установки-чек-лист)
-- [SSH-управление нодами из админки](#ssh-управление-нодами-из-админки)
-- [Основные переменные окружения](#основные-переменные-окружения)
-- [API и интерфейс](#api-и-интерфейс)
-- [Мониторинг и диагностика](#мониторинг-и-диагностика)
-- [Безопасность](#безопасность)
+- [Быстрый старт](#быстрый-старт)
+- [Полная установка — сервер FFXBan](#полная-установка--сервер-ffxban)
+- [Добавление ноды](#добавление-ноды)
+- [Проверка после установки](#проверка-после-установки)
+- [Устранение неполадок](#устранение-неполадок)
+- [Основные переменные](#основные-переменные)
 - [Обновление](#обновление)
+- [Архитектура](#архитектура)
+- [Безопасность](#безопасность)
 
 ---
 
-## Что это
+## Быстрый старт
 
-**FFXBan** — это центральный сервис (FFXBAN) + агент на нодах (Blocker + Vector), который:
+Для тех, кто уже знает что делает. Нужен сервер с Ubuntu/Debian, домен и TLS-сертификат.
 
-- собирает события подключений пользователей с нод;
-- ведет runtime-состояние в Redis;
-- применяет правила анти-шаринга и анти-false-positive;
-- отправляет команды блокировки/разблокировки IP на ноды через RabbitMQ;
-- применяет блокировки на нодах в `nftables`;
-- показывает всё в веб-панели в реальном времени.
+```bash
+# 1. Docker
+curl -fsSL https://get.docker.com | sh
 
----
+# 2. TLS-сертификат (оба домена → один сертификат)
+apt install -y certbot
+certbot certonly --standalone \
+  -d ffxban.example.com \
+  -d panel.ffxban.example.com \
+  --email admin@example.com --agree-tos --non-interactive
 
-## Ключевые возможности
+# 3. Клонировать и запустить
+git clone https://github.com/YOUR/REPO.git FFX && cd FFX/ffxban_conf
+bash bootstrap.sh --observer-domain ffxban.example.com
 
-- Детекция одновременного использования подписки (sharing detection).
-- Runtime banlist/permanent ban, эскалация банов.
-- Учет сетевого типа IP (mobile/wifi/cable/unknown) для снижения ложных срабатываний.
-- Эвристики против ложных блокировок.
-- Гео-анализ (опционально): подозрение при одновременных сессиях из разных стран.
-- Подтвержденные статусы блокировок и heartbeat от blocker-нод.
-- Веб-панель с live-обновлениями (WebSocket + polling fallback).
-- Массовое и точечное SSH-управление нодами прямо из панели.
-- Runtime overrides конфигурации из UI (без ручного редактирования `.env`).
-
----
-
-## Как работает система
-
-1. Нода пишет логи подключений (Xray/Remnawave) в файл.
-2. `Vector` на ноде парсит лог, формирует JSON и отправляет на сервер FFXBan (`/log-entry` через nginx).
-3. `Vector Aggregator` на сервере FFXBan принимает батчи и проксирует в `ffxban`.
-4. `ffxban` сохраняет и анализирует состояние в Redis (IP, TTL, триггеры, статусы, события).
-5. При необходимости `ffxban` публикует команду block/unblock в RabbitMQ.
-6. `blocker-worker` на каждой ноде читает очередь и применяет `nft`-команды в `nftables set`.
-7. Нода отправляет heartbeat/action-отчеты обратно в статусный exchange.
-8. Панель отображает текущую картину: пользователи, нарушения, бан-лист, состояние нод, SSH-вывод.
-
----
-
-## Архитектура
-
-```mermaid
-flowchart LR
-  U[Пользователи VPN] --> N[VPN ноды]
-  N --> VL[Vector на ноде]
-  VL -->|HTTPS /log-entry| NX1[Nginx FFXBan]
-  NX1 --> VA[Vector Aggregator]
-  VA --> OBS[FFXBan API]
-
-  OBS <--> R[(Redis)]
-  OBS -->|block/unblock| MQ[(RabbitMQ)]
-  MQ --> BW1[blocker-worker нода A]
-  MQ --> BW2[blocker-worker нода B]
-  BW1 --> NFT1[nftables set]
-  BW2 --> NFT2[nftables set]
-
-  BW1 -->|status/heartbeat| MQS[(status exchange)]
-  BW2 -->|status/heartbeat| MQS
-  MQS --> OBS
-
-  ADM[Админ] --> NX2[Nginx Panel]
-  NX2 -->|/panel, /api/*, /api/ws| OBS
+# 4. Добавить ноду (запускать на сервере FFXBan)
+cd ../ffxban_agent
+NODE_NAME="Latvia" NODE_IP="1.2.3.4" NODE_USER="root" bash deploy.sh
 ```
 
+Панель: `https://panel.ffxban.example.com/`
+Пароль — выведет bootstrap.sh в конце.
+
 ---
 
-## Структура репозитория
+## Полная установка — сервер FFXBan
 
-```text
-ffxban/                # основной сервис (API, панель, обработка, Redis/RabbitMQ интеграции)
-ffxban_conf/           # docker-compose и конфиги FFXBan (nginx, vector, env-example)
-ffxban_agent/          # скрипты deploy/install/uninstall для нод
-ffxban_blocker/        # исходники blocker-worker (применяет nftables-команды)
-ffxban_blocker_conf/   # пример docker-compose и vector-конфиг для blocker-ноды
-docs/                  # служебные документы/ассеты
+### Что нужно перед началом
+
+| Требование | Подробности |
+|---|---|
+| Сервер | Linux Ubuntu 22.04+ / Debian 11+, минимум 1 CPU / 1 GB RAM |
+| Домен | Два поддомена, оба указывают на IP сервера FFXBan |
+| Порты | `80` (временно, для TLS), `443` (панель), `38213` (логи с нод), `5672` (RabbitMQ) |
+
+> **В инструкции используется домен `ffxban.example.com`** — везде заменяйте на ваш.
+
+---
+
+### Шаг 1. DNS
+
+Создайте в панели вашего DNS-провайдера две A-записи (обе на IP сервера FFXBan):
+
+```
+ffxban.example.com         A  →  1.2.3.4
+panel.ffxban.example.com   A  →  1.2.3.4
 ```
 
+Убедитесь, что DNS уже сработал:
+```bash
+nslookup ffxban.example.com
+nslookup panel.ffxban.example.com
+```
+Оба должны вернуть IP вашего сервера.
+
 ---
 
-## Пошаговая установка и настройка (FFXBan)
+### Шаг 2. Установить Docker
 
-Ниже инструкция для “чистой” установки центрального сервера FFXBan.
-
-### Шаг 0. Что нужно заранее
-
-- Сервер с Linux (Ubuntu/Debian).
-- Домен(ы), которые укажете в `nginx.conf`.
-- TLS-сертификат(ы) для этих доменов (например Let's Encrypt).
-- Открытые порты на сервере FFXBan:
-  - `443/tcp` — панель и входящий HTTPS;
-  - `38213/tcp` — прием логов от нод через nginx;
-  - `5672/tcp` — RabbitMQ для blocker-нод (лучше ограничить только IP нод).
-
-### Шаг 1. Установить Docker
-
-Если Docker уже стоит, этот шаг пропустите.
+Если Docker уже стоит — пропустите.
 
 ```bash
 curl -fsSL https://get.docker.com | sh
-sudo systemctl enable docker
-sudo systemctl start docker
-docker --version
-docker compose version
+systemctl enable docker && systemctl start docker
+docker --version && docker compose version
 ```
 
-### Шаг 2. Подготовить проект
+---
 
-Клонируйте репозиторий (любой из вариантов):
+### Шаг 3. TLS-сертификат
 
-**Вариант 1 (SSH):**
+Сертификат нужен **до запуска** FFXBan — nginx не стартует без него.
+
 ```bash
-git clone git@github.com:<GITHUB_USERNAME>/<REPOSITORY_NAME>.git FFX
+# Установить certbot (если нет)
+apt install -y certbot
+
+# Открыть порт 80 временно (нужен certbot для проверки домена)
+ufw allow 80/tcp
+
+# Получить сертификат — покрывает оба домена сразу
+certbot certonly --standalone \
+  -d ffxban.example.com \
+  -d panel.ffxban.example.com \
+  --email admin@example.com \
+  --agree-tos \
+  --non-interactive
+
+# Закрыть порт 80 обратно
+ufw delete allow 80/tcp
+```
+
+Проверьте что сертификат создан:
+```bash
+ls /etc/letsencrypt/live/ffxban.example.com/
+# Должны быть: fullchain.pem  privkey.pem
+```
+
+---
+
+### Шаг 4. Открыть порты
+
+```bash
+ufw allow 443/tcp     # Панель и HTTPS
+ufw allow 38213/tcp   # Приём логов с нод
+ufw allow 5672/tcp    # RabbitMQ для нод (после добавления нод — ограничьте по IP)
+ufw enable
+```
+
+---
+
+### Шаг 5. Клонировать репозиторий
+
+```bash
+git clone https://github.com/YOUR/REPO.git FFX
 cd FFX
 ```
 
-**Вариант 2 (HTTPS):**
-```bash
-git clone https://github.com/<GITHUB_USERNAME>/<REPOSITORY_NAME>.git FFX
-cd FFX
-```
+---
 
-### Шаг 3. Подготовить `.env`
-
-```bash
-cp ffxban_conf/.env.example ffxban_conf/.env
-```
-
-Обязательно заполните в `ffxban_conf/.env`:
-
-- `PANEL_PASSWORD`
-- `INTERNAL_API_TOKEN`
-- `RABBIT_USER`
-- `RABBIT_PASSWD`
-- `RABBITMQ_URL` (должен совпадать с user/password выше)
-- `EXCLUDED_IPS` (добавьте IP нод и служебные IP, которые нельзя блокировать)
-
-Быстрая генерация секретов:
-
-```bash
-openssl rand -hex 32   # INTERNAL_API_TOKEN
-openssl rand -hex 24   # пароль панели или RabbitMQ пароль
-```
-
-Минимальный рабочий фрагмент `.env`:
-
-```dotenv
-PANEL_PASSWORD=CHANGE_ME_STRONG_PASSWORD
-INTERNAL_API_TOKEN=CHANGE_ME_INTERNAL_API_TOKEN
-RABBIT_USER=ffxban
-RABBIT_PASSWD=CHANGE_ME_RABBIT_PASSWORD
-RABBITMQ_URL=amqp://ffxban:CHANGE_ME_RABBIT_PASSWORD@rabbitmq:5672/
-EXCLUDED_IPS=127.0.0.1
-```
-
-### Шаг 4. Настроить `nginx.conf`
-
-Файл: `ffxban_conf/nginx.conf`
-
-Замените:
-
-- `ffxban.example.com` / `panel.ffxban.example.com`
-- пути к сертификатам `/etc/letsencrypt/live/...`
-
-Проверьте, что сертификаты реально существуют на сервере:
-
-```bash
-ls -la /etc/letsencrypt/live/<ваш_домен>/
-```
-
-### Шаг 5. Собрать сервис
-
-FFXBan в текущем compose использует **и образ**, и локальный бинарник `ffxban-custom`.
-
-```bash
-docker build -t ffxban-remnawave:latest ./ffxban
-cd ffxban
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../ffxban_conf/ffxban-custom ./cmd/ffxban
-cd ..
-chmod +x ffxban_conf/ffxban-custom
-```
-
-### Шаг 6. Запустить контейнеры
+### Шаг 6. Запуск через Bootstrap
 
 ```bash
 cd ffxban_conf
-docker compose up -d
+bash bootstrap.sh --observer-domain ffxban.example.com
 ```
+
+Скрипт автоматически:
+- создаст `.env` и сгенерирует все пароли
+- заменит домены в `nginx.conf`
+- соберёт и запустит все контейнеры
+
+В конце выведет:
+```
+Panel URL:      https://panel.ffxban.example.com/
+PANEL_PASSWORD: xxxxxxxxxxxxxxxx
+RABBIT_USER:    ffxban
+RABBIT_PASSWD:  xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+**Сохраните `PANEL_PASSWORD`** — это пароль для входа в панель.
+
+---
 
 ### Шаг 7. Проверить запуск
 
 ```bash
 docker ps --format 'table {{.Names}}\t{{.Status}}'
-docker logs --tail=80 ffxban
-docker logs --tail=80 ffxban-nginx-proxy
-curl -k https://panel.<ваш-домен>/health
 ```
 
-Ожидаемо в `docker ps`:
+Ожидаемый вывод:
+```
+NAMES                       STATUS
+ffxban                      Up X minutes
+ffxban-nginx-proxy          Up X minutes
+ffxban-rabbitmq             Up X minutes
+ffxban-vector-aggregator    Up X minutes
+ffxban-redis                Up X minutes
+```
 
-- `ffxban`
-- `ffxban-nginx-proxy`
-- `ffxban-rabbitmq`
-- `ffxban-vector-aggregator`
-- `ffxban-redis`
+Проверить здоровье:
+```bash
+curl https://panel.ffxban.example.com/health
+# Должен вернуть: ok
+```
 
-### Шаг 8. Первый вход в панель
-
-- Откройте `https://panel.<ваш-домен>/`
-- Введите `PANEL_PASSWORD` из `.env`.
+Откройте панель: **`https://panel.ffxban.example.com/`**
+Введите пароль из вывода bootstrap.sh.
 
 ---
 
-## Установка и подключение нод (агенты)
+## Добавление ноды
 
-Ниже самый понятный и быстрый путь: запуск `deploy.sh` с сервера FFXBan.
-
-Скрипты агента:
-
-- [`deploy.sh`](./ffxban_agent/deploy.sh) — удалённый деплой на ноду по SSH.
-- [`install.sh`](./ffxban_agent/install.sh) — ручная установка на ноде.
-- [`uninstall.sh`](./ffxban_agent/uninstall.sh) — удаление агента с ноды.
-
-### Вариант A (рекомендуется): автоматический deploy с сервера FFXBan
-
-Запуск на сервере FFXBan:
+Нода подключается **одной командой**, запускаемой на сервере FFXBan.
 
 ```bash
-cd FFX/ffxban_agent
+cd ~/FFX/ffxban_agent
+
 NODE_NAME="Latvia" \
-NODE_IP="1.2.3.4" \
+NODE_IP="5.6.7.8" \
 NODE_USER="root" \
-RABBITMQ_URL="amqp://ffxban:пароль@<IP_OBSERVER>:5672/" \
-OBSERVER_DOMAIN="ffxban.example.com" \
 bash deploy.sh
 ```
 
-Что сделает скрипт:
+| Параметр | Описание |
+|---|---|
+| `NODE_NAME` | Имя ноды — **точно как в панели Remnawave** (например `Latvia`, `Germany-1`) |
+| `NODE_IP` | IP-адрес ноды |
+| `NODE_USER` | SSH-пользователь ноды (обычно `root`) |
 
-- соберет `blocker-worker`;
-- передаст бинарник и `install.sh` на ноду;
-- установит systemd-сервис blocker;
-- поднимет `ffxban-vector` в Docker на ноде;
-- настроит парсинг логов и отправку на сервер FFXBan.
+Скрипт автоматически:
+1. Соберёт бинарник `blocker-worker` (нужен Go или Docker на сервере FFXBan)
+2. Подключится к ноде по SSH
+3. Установит и запустит `blocker-worker` как systemd-сервис
+4. Установит Docker и запустит Vector для сбора логов Xray
+5. Настроит nftables для применения блокировок
 
-Проверка на ноде:
+После запуска нода появится в разделе **Nodes** в панели.
+
+### Добавить несколько нод
+
+Запустите deploy.sh несколько раз:
 
 ```bash
+NODE_NAME="Germany-1" NODE_IP="10.0.0.1" NODE_USER="root" bash deploy.sh
+NODE_NAME="Finland-1" NODE_IP="10.0.0.2" NODE_USER="root" bash deploy.sh
+NODE_NAME="Latvia-1"  NODE_IP="10.0.0.3" NODE_USER="root" bash deploy.sh
+```
+
+### Ограничить RabbitMQ после добавления всех нод
+
+Когда все ноды добавлены, закройте порт 5672 от всего интернета и разрешите только IP нод:
+
+```bash
+ufw delete allow 5672/tcp
+ufw allow from 10.0.0.1 to any port 5672
+ufw allow from 10.0.0.2 to any port 5672
+ufw allow from 10.0.0.3 to any port 5672
+```
+
+---
+
+## Проверка после установки
+
+### Сервер FFXBan
+
+```bash
+# Логи основного сервиса
+docker logs --tail=50 ffxban
+
+# RabbitMQ работает?
+docker exec ffxban-rabbitmq rabbitmq-diagnostics ping
+
+# Redis работает?
+docker exec ffxban-redis redis-cli ping
+```
+
+### На ноде
+
+```bash
+ssh root@NODE_IP
+
+# Blocker запущен?
 systemctl status ffxban-blocker --no-pager
+
+# Vector запущен?
 docker ps | grep ffxban-vector
+
+# Логи в реальном времени
+journalctl -u ffxban-blocker -f
+docker logs ffxban-vector -f
+
+# Заблокированные IP (появятся после первых блокировок)
+nft list set inet firewall user_blacklist
+```
+
+### Чек-лист
+
+- [ ] Панель открывается по HTTPS
+- [ ] В разделе **Nodes** нода отображается, heartbeat обновляется
+- [ ] В разделе **Live Logs** появляются входящие события
+- [ ] Тестовая блокировка применяется в `nftables` на ноде
+
+---
+
+## Устранение неполадок
+
+### Контейнер nginx не стартует
+
+```bash
+docker logs ffxban-nginx-proxy
+```
+
+Чаще всего — не найден TLS-сертификат. Проверьте:
+```bash
+ls /etc/letsencrypt/live/ffxban.example.com/
+```
+Если файлов нет — вернитесь к **Шагу 3** и выпустите сертификат.
+
+---
+
+### Нода не появляется в панели
+
+Blocker не может подключиться к RabbitMQ. Проверьте на ноде:
+```bash
 journalctl -u ffxban-blocker -n 50 --no-pager
-docker logs --tail=50 ffxban-vector
 ```
 
-### Вариант B: ручная установка на ноде
+Типичные причины:
+1. Порт `5672` закрыт на сервере FFXBan — откройте: `ufw allow 5672/tcp`
+2. Неверный пароль RabbitMQ — посмотрите актуальный: `grep RABBIT ~/FFX/ffxban_conf/.env`
 
-Если нужно ставить вручную:
+---
 
-1. Скопируйте на ноду файлы `install.sh` и бинарник `blocker-worker`.
-2. Запустите:
+### Нет логов в панели (Vector не шлёт данные)
+
+Проверьте на ноде:
 ```bash
-sudo NODE_NAME="Latvia" \
-RABBITMQ_URL="amqp://ffxban:пароль@<IP_OBSERVER>:5672/" \
-OBSERVER_DOMAIN="ffxban.example.com" \
-bash install.sh
+docker logs ffxban-vector --tail=50
 ```
 
-Удаление агента:
-
+Проверьте доступность сервера с ноды:
 ```bash
-sudo bash uninstall.sh
+curl -k https://ffxban.example.com:38213/ --max-time 5
 ```
+
+Порт `38213` должен быть открыт на сервере FFXBan.
 
 ---
 
-## Проверка после установки (чек-лист)
+### Deploy.sh просит пароль при каждой команде SSH
 
-Пройдите по порядку:
+Это нормально при входе по паролю — скрипт использует один SSH-сокет, пароль вводится только один раз в начале.
 
-1. В панели `Nodes` нода отображается и heartbeat обновляется.
-2. На сервере FFXBan в логах нет постоянных ошибок RabbitMQ/Redis.
-3. На ноде `ffxban-blocker` в статусе `active (running)`.
-4. На ноде контейнер `ffxban-vector` запущен.
-5. В панели появляются свежие события в логах пользователей.
-6. Тестовая блокировка из панели применяет IP в `nftables` на ноде.
-
-Проверка `nftables` на ноде:
-
+Чтобы вообще не вводить пароль, скопируйте SSH-ключ на ноду:
 ```bash
-sudo nft list set inet firewall user_blacklist
+# На сервере FFXBan
+ssh-keygen -t ed25519          # если нет ключа
+ssh-copy-id root@NODE_IP        # копирует ключ на ноду
 ```
 
 ---
 
-## SSH-управление нодами из админки
-
-Поддерживается:
-
-- массовое выполнение команд на выбранных нодах;
-- выполнение на одной ноде;
-- интерактивный terminal (WebSocket);
-- credentials per-node (user/password/private key) через UI.
-
-Ключевые env:
-
-- `NODE_SSH_ENABLED=true`
-- `NODE_SSH_USER=...`
-- `NODE_SSH_PASSWORD=...` или `NODE_SSH_PRIVATE_KEY=...`
-- `NODE_SSH_COMMAND_TIMEOUT_SECONDS`
-- `NODE_SSH_MAX_PARALLEL`
-
-Важно:
-
-- long-running SSH exec обслуживается отдельным nginx location `/api/nodes/ssh/exec` с увеличенными таймаутами;
-- серверный HTTP `WriteTimeout` увеличен, чтобы не рвать длинные ответы.
-
----
-
-## Основные переменные окружения
-
-Полный список: `ffxban_conf/.env.example`.
-
-### Безопасность и доступ
-
-- `PANEL_PASSWORD` — пароль админ-панели (обязательно).
-- `INTERNAL_API_TOKEN` — токен внутренних API (рекомендуется обязательно).
-
-### Очереди и storage
-
-- `RABBITMQ_URL`, `RABBIT_USER`, `RABBIT_PASSWD`
-- `REDIS_URL`
-
-### Логика детекции
-
-- `MAX_IPS_PER_USER`
-- `SHARING_*`
-- `TRIGGER_*`
-- `BANLIST_THRESHOLD_SECONDS`
-- `BAN_ESCALATION_*`
-- `GEO_SHARING_*`
-
-### Сетевые эвристики
-
-- `NETWORK_DETECT_ENABLED`
-- `NETWORK_LOOKUP_PROVIDER`, `NETWORK_LOOKUP_URL`, `NETWORK_LOOKUP_TOKEN`
-- `NETWORK_POLICY_ENABLED`
-- `NETWORK_*_GRACE_IPS`
-
-### Панель/интеграции
-
-- `PANEL_URL`, `PANEL_TOKEN` (если используете внешнюю панель-источник лимитов)
-- `ALERT_WEBHOOK_*`
-- `PROMETHEUS_ENABLED`
-
----
-
-## API и интерфейс
-
-Основные публичные endpoints FFXBan:
-
-- `POST /log-entry` — входящий поток логов.
-- `POST /node-heartbeat` — heartbeat ноды.
-- `GET /health` — healthcheck.
-- `GET /metrics` — Prometheus метрики.
-- `GET /panel` — UI панели.
-
-Основные внутренние endpoints панели (`/api/*`, требуется авторизация):
-
-- статистика, пользователи, логи, banlist, permanent sharing;
-- управление блокировками (`/actions/block`, `/actions/unblock`, `/actions/clear`);
-- node ssh exec/creds/terminal;
-- runtime config overrides.
-
-Live-обновления:
-
-- `GET /api/ws` (WebSocket), fallback — polling.
-
----
-
-## Мониторинг и диагностика
-
-### Полезные команды
+### Как посмотреть текущие пароли
 
 ```bash
-# FFXBan server
-docker logs -f ffxban
-docker logs -f ffxban-nginx-proxy
-docker logs -f ffxban-vector-aggregator
-
-# RabbitMQ health
-docker exec -it ffxban-rabbitmq rabbitmq-diagnostics ping
-
-# Redis health
-docker exec -it ffxban-redis redis-cli ping
+cat ~/FFX/ffxban_conf/.env
 ```
-
-### Типовые проблемы
-
-1. Нода offline в панели:
-`blocker-worker` не отправляет heartbeat, проверьте `journalctl -u ffxban-blocker -f`.
-
-2. Нет входящих логов:
-проверьте `Vector` на ноде и доступность `https://ffxban-domain:38213/`.
-
-3. SSH `unable to authenticate`:
-проверьте credentials в UI (кнопка с шестеренкой у ноды) или глобальные `NODE_SSH_*`.
-
-4. Ошибки `/api/nodes/ssh/exec`:
-проверьте таймауты nginx и серверный `WriteTimeout`, а также сетевую доступность нод.
 
 ---
 
-## Безопасность
+### Пересоздать .env с нуля
 
-- Не коммитьте реальные `.env` файлы.
-- Не храните ключи/пароли в репозитории.
-- Ограничьте доступ к `5672/tcp` только IP ваших нод.
-- Не публикуйте `15672` RabbitMQ management в интернет.
-- Защищайте `/metrics` и внутренние API через nginx/firewall.
-- Используйте длинные случайные токены и периодический rotate секретов.
+```bash
+rm ~/FFX/ffxban_conf/.env
+cd ~/FFX/ffxban_conf
+bash bootstrap.sh --observer-domain ffxban.example.com
+```
+
+---
+
+## Основные переменные
+
+Все настройки — в `ffxban_conf/.env`. Bootstrap.sh генерирует основные значения автоматически.
+
+| Переменная | Описание | По умолчанию |
+|---|---|---|
+| `PANEL_PASSWORD` | Пароль панели | авто |
+| `MAX_IPS_PER_USER` | Лимит одновременных IP на пользователя | `12` |
+| `BLOCK_DURATION` | Длительность блокировки (`5m`, `1h`, `24h`) | `5m` |
+| `SHARING_BLOCK_ON_BANLIST_ONLY` | Блокировать только из ban-list (рекомендуется) | `true` |
+| `EXCLUDED_IPS` | IP которые никогда не блокируются | `127.0.0.1` |
+| `ALERT_WEBHOOK_URL` | Webhook для уведомлений (Telegram-бот) | — |
+| `PANEL_URL` + `PANEL_TOKEN` | Интеграция с панелью Remnawave | — |
+| `NODE_SSH_ENABLED` | SSH-управление нодами из панели | `false` |
+
+Полный список с комментариями: [`ffxban_conf/.env.example`](ffxban_conf/.env.example)
 
 ---
 
 ## Обновление
 
 ```bash
-docker build -t ffxban-remnawave:latest ./ffxban
-cd ffxban
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ../ffxban_conf/ffxban-custom ./cmd/ffxban
-cd ../ffxban_conf
-docker compose up -d --force-recreate ffxban
+cd ~/FFX
+git pull
+cd ffxban_conf
+docker compose up -d --build ffxban
 ```
 
 Проверка после обновления:
-
 ```bash
-docker logs --tail=100 ffxban
-curl -k https://panel.your-domain.tld/health
+docker logs --tail=50 ffxban
+curl https://panel.ffxban.example.com/health
 ```
 
 ---
 
-## Примечание
+## Архитектура
 
-Проект ориентирован на self-hosted эксплуатацию и администрирование собственных нод.
-Перед публикацией в открытый доступ обязательно проверьте репозиторий на секреты и приватные данные инфраструктуры.
+### Как работает система
+
+1. Нода записывает логи подключений Xray в файл
+2. `Vector` на ноде парсит лог и отправляет JSON на FFXBan (`:38213`)
+3. `Vector Aggregator` принимает батчи и передаёт в `ffxban`
+4. `ffxban` анализирует IP-активность в Redis и применяет правила анти-шаринга
+5. При нарушении — публикует команду block/unblock в RabbitMQ
+6. `blocker-worker` на ноде читает очередь и применяет `nft`-команды
+7. Нода отправляет heartbeat и отчёты о статусе блокировок обратно
+8. Панель показывает всё в реальном времени
+
+```mermaid
+flowchart LR
+  U[Пользователи VPN] --> N[VPN ноды]
+  N --> VL[Vector на ноде]
+  VL -->|HTTPS :38213| NX1[Nginx FFXBan]
+  NX1 --> VA[Vector Aggregator]
+  VA --> OBS[FFXBan API]
+
+  OBS <--> R[(Redis)]
+  OBS -->|block/unblock| MQ[(RabbitMQ :5672)]
+  MQ --> BW1[blocker-worker нода A]
+  MQ --> BW2[blocker-worker нода B]
+  BW1 --> NFT1[nftables]
+  BW2 --> NFT2[nftables]
+
+  BW1 -->|heartbeat| MQ
+  BW2 -->|heartbeat| MQ
+  MQ --> OBS
+
+  ADM[Админ] --> NX2[Nginx :443]
+  NX2 -->|/panel /api/*| OBS
+```
+
+### Структура репозитория
+
+```
+ffxban/              — центральный сервис (API, панель, Redis/RabbitMQ)
+ffxban_conf/         — docker-compose, nginx, vector, .env для FFXBan
+ffxban_agent/        — скрипты deploy/install/uninstall для нод
+ffxban_blocker/      — исходники blocker-worker (nftables-агент)
+ffxban_blocker_conf/ — пример конфига для ручной установки ноды
+```
+
+### API-эндпоинты
+
+| Эндпоинт | Описание |
+|---|---|
+| `GET /health` | Healthcheck |
+| `GET /panel` | Веб-панель |
+| `GET /api/ws` | WebSocket live-обновления |
+| `POST /log-entry` | Приём логов от нод |
+| `GET /metrics` | Prometheus-метрики |
+
+---
+
+## Безопасность
+
+- Не коммитьте `.env` в репозиторий
+- Ограничьте порт `5672` только IP ваших нод
+- Не открывайте порт `15672` (RabbitMQ management) в интернет
+- Периодически обновляйте TLS-сертификаты: `certbot renew`
+
+---
+
+> Проект предназначен для self-hosted эксплуатации собственной VPN-инфраструктуры.
+> Перед публикацией репозитория в открытый доступ убедитесь, что в нём нет секретов и приватных данных.

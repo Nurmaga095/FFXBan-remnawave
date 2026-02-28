@@ -1,14 +1,15 @@
 services:
   ffxban:
     container_name: ffxban
+    build:
+      context: ../ffxban
+      dockerfile: Dockerfile
     image: ffxban-remnawave:latest
     restart: unless-stopped
     expose:
       - "9000"
     env_file:
       - .env
-    volumes:
-      - ./ffxban-custom:/app/ffxban
     depends_on:
       rabbitmq:
         condition: service_healthy

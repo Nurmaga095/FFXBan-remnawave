@@ -9,7 +9,6 @@
 #
 # Использование (автоматически):
 #   NODE_NAME="Латвия" NODE_IP="1.2.3.4" NODE_USER="root" \
-#   RABBITMQ_URL="amqp://user:pass@127.0.0.1:5672/" \
 #   OBSERVER_DOMAIN="observer.example.com" bash deploy.sh
 # =============================================================================
 set -euo pipefail
@@ -33,6 +32,15 @@ sanitize_domain() {
     v="${v%%:*}"
     echo "${v}"
 }
+get_local_ip() {
+    hostname -I 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i !~ /^127\./) {print $i; exit}}'
+}
+read_env_value() {
+    local file="$1"
+    local key="$2"
+    [ -f "${file}" ] || return 1
+    awk -F= -v key="${key}" '$1==key {print substr($0, length(key)+2); exit}' "${file}"
+}
 
 # --- Директория со скриптом (ffxban_agent/) ---
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,10 +49,11 @@ PROJECT_ROOT="$(dirname "${SCRIPT_DIR}")"
 BLOCKER_SRC="${PROJECT_ROOT}/ffxban_blocker"
 REMOTE_TMP="/tmp/ffxban-install"
 BINARY_OUT="${SCRIPT_DIR}/blocker-worker"
+OBSERVER_ENV_FILE="${PROJECT_ROOT}/ffxban_conf/.env"
 
 echo ""
 echo "╔══════════════════════════════════════╗"
-echo "║      FFXBan Deploy Script v2.0      ║"
+echo "║      FFXBan Deploy Script v2.1      ║"
 echo "╚══════════════════════════════════════╝"
 
 # =============================================================================
@@ -97,18 +106,38 @@ SSH_OPTS+=(-o ControlMaster=auto -o ControlPersist=10m -o ControlPath="${CONTROL
 SSH_MASTER_STARTED=0
 trap cleanup_ssh_master EXIT
 
+if [ -z "${OBSERVER_DOMAIN:-}" ]; then
+    DETECTED_OBSERVER_IP="$(get_local_ip || true)"
+    if [ -n "${DETECTED_OBSERVER_IP}" ]; then
+        OBSERVER_DOMAIN="${DETECTED_OBSERVER_IP}"
+        ok "OBSERVER_DOMAIN не задан — используем IP сервера: ${OBSERVER_DOMAIN}"
+    else
+        ask "Домен/IP Observer (например observer.example.com или 1.2.3.4):"
+        read -r OBSERVER_DOMAIN
+    fi
+fi
+OBSERVER_DOMAIN="$(sanitize_domain "${OBSERVER_DOMAIN:-}")"
+[ -n "${OBSERVER_DOMAIN}" ] || fail "OBSERVER_DOMAIN не задан"
+
+if [ -z "${RABBITMQ_URL:-}" ] && [ -f "${OBSERVER_ENV_FILE}" ]; then
+    RABBIT_USER_FROM_ENV="$(read_env_value "${OBSERVER_ENV_FILE}" "RABBIT_USER" || true)"
+    RABBIT_PASS_FROM_ENV="$(read_env_value "${OBSERVER_ENV_FILE}" "RABBIT_PASSWD" || true)"
+    if [ -n "${RABBIT_USER_FROM_ENV}" ] && [ -n "${RABBIT_PASS_FROM_ENV}" ]; then
+        RABBITMQ_URL="amqp://${RABBIT_USER_FROM_ENV}:${RABBIT_PASS_FROM_ENV}@${OBSERVER_DOMAIN}:5672/"
+        ok "RABBITMQ_URL собран из ${OBSERVER_ENV_FILE}"
+    fi
+fi
+
 if [ -z "${RABBITMQ_URL:-}" ]; then
-    ask "RABBITMQ_URL (amqp://user:pass@OBSERVER_IP:5672/):"
+    ask "RABBITMQ_URL (amqp://user:pass@${OBSERVER_DOMAIN}:5672/):"
     read -r RABBITMQ_URL
 fi
 [ -n "${RABBITMQ_URL:-}" ] || fail "RABBITMQ_URL не задан"
 
-if [ -z "${OBSERVER_DOMAIN:-}" ]; then
-    ask "Домен Observer (например observer.example.com):"
-    read -r OBSERVER_DOMAIN
+if printf '%s' "${RABBITMQ_URL}" | grep -q '@rabbitmq[:/]'; then
+    warn "Хост rabbitmq работает только внутри Docker-сети Observer."
+    warn "Для ноды укажите домен/IP Observer (пример: amqp://user:pass@${OBSERVER_DOMAIN}:5672/)."
 fi
-OBSERVER_DOMAIN="$(sanitize_domain "${OBSERVER_DOMAIN:-}")"
-[ -n "${OBSERVER_DOMAIN}" ] || fail "OBSERVER_DOMAIN не задан"
 
 NFT_TABLE="${NFT_TABLE:-firewall}"
 NFT_SET="${NFT_SET:-user_blacklist}"
